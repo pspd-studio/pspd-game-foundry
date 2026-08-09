@@ -3,19 +3,19 @@
   "regions": [
     {
       "id": "forest", "name_ko": "숲", "difficulty": 1,
-      "card_pool": ["seed", "branch", "water", "mushroom", "snail", "feather", "bone"],
+      "card_pool": ["seed", "branch", "water", "mushroom", "snail", "feather", "bone", "lightning"],
       "enemy_pool": ["e_spider", "e_spawner", "e_thief"],
       "theme_tags": ["plant", "creature", "life", "poison"]
     },
     {
       "id": "ruins", "name_ko": "폐허", "difficulty": 2,
-      "card_pool": ["stone", "metal", "paper", "ink", "bone", "candle", "star"],
+      "card_pool": ["stone", "metal", "paper", "ink", "bone", "candle", "star", "water"],
       "enemy_pool": ["e_thief", "e_golem", "e_witch"],
       "theme_tags": ["mineral", "craft", "record", "death"]
     },
     {
       "id": "volcano", "name_ko": "화산", "difficulty": 3,
-      "card_pool": ["fire", "stone", "metal", "lightning", "bone"],
+      "card_pool": ["fire", "stone", "metal", "lightning", "bone", "water"],
       "enemy_pool": ["e_golem", "e_witch", "e_spawner"],
       "theme_tags": ["heat", "energy", "mineral"]
     }
