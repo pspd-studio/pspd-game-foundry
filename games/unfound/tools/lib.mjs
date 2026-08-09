@@ -1,51 +1,29 @@
+/**
+ * 노드용 데이터 로더. 색인을 만드는 로직은 여기 없다 —
+ * src/core/data.ts의 buildData가 유일한 구현이고, 브라우저도 그것을 쓴다.
+ * (노드 22.18+/24는 .ts를 그대로 import한다. 타입만 벗겨내므로 빌드 단계가 필요 없다.)
+ */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { buildData, pairKey, cardPower, fmtPct, makeRng } from '../src/core/index.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 export function loadData() {
   const read = (f) => JSON.parse(readFileSync(join(ROOT, 'data', f), 'utf8'));
-  const effects = read('effects.json').effects;
-  const cards = read('cards.json').cards;
-  const recipes = read('recipes.json').recipes;
-  const enemies = read('enemies.json').enemies;
-  const regions = read('regions.json').regions;
-  const rules = read('rules.json');
-
-  const effectById = new Map(effects.map((e) => [e.id, e]));
-  const cardById = new Map(cards.map((c) => [c.id, c]));
-  const enemyById = new Map(enemies.map((e) => [e.id, e]));
-
-  // 순서 무관 조합 키
-  const recipeByKey = new Map();
-  for (const r of recipes) recipeByKey.set(pairKey(r.inputs[0], r.inputs[1]), r);
-
-  return { effects, cards, recipes, enemies, regions, rules, effectById, cardById, enemyById, recipeByKey, ROOT };
+  const data = buildData({
+    cards: read('cards.json'),
+    recipes: read('recipes.json'),
+    effects: read('effects.json'),
+    enemies: read('enemies.json'),
+    regions: read('regions.json'),
+    rules: read('rules.json'),
+  });
+  return { ...data, ROOT };
 }
 
-export function pairKey(a, b) {
-  return [a, b].sort().join('+');
-}
-
-export function cardPower(card, effectById) {
-  return (card.effects || []).reduce((s, id) => s + (effectById.get(id)?.weight ?? 0), 0);
-}
-
-export function fmtPct(n) {
-  return `${(n * 100).toFixed(1)}%`;
-}
-
-// 재현 가능한 난수 (시드 고정 → 같은 결과)
-export function makeRng(seed) {
-  let s = seed >>> 0 || 1;
-  return () => {
-    s ^= s << 13; s >>>= 0;
-    s ^= s >> 17;
-    s ^= s << 5; s >>>= 0;
-    return s / 4294967296;
-  };
-}
+export { pairKey, cardPower, fmtPct, makeRng };
 
 export function pick(arr, rng) {
   return arr[Math.floor(rng() * arr.length)];

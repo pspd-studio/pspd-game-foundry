@@ -1,13 +1,22 @@
 {
   "name": "unfound",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "카드 조합 발견 로그라이크",
-  "engines": { "node": ">=22" },
+  "engines": { "node": ">=22.18" },
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "validate": "node tools/validate.mjs",
     "sim": "node tools/simulate.mjs 2000 42",
-    "check": "npm run validate && npm run sim"
+    "smoke": "node tools/smoke.mjs",
+    "check": "npm run validate && npm run sim && npm run smoke"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3"
   }
 }

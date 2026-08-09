@@ -1,0 +1,131 @@
+/* 아트 에셋 없음. 카드는 이름 텍스트 + 색 사각형이고 폭이 slot_cost를 나타낸다. */
+:root {
+  --bg: #14161a;
+  --panel: #1c1f25;
+  --line: #2c313a;
+  --fg: #e8eaee;
+  --dim: #939aa6;
+  --accent: #ffd166;
+  --slot: 74px;
+  --gap: 8px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.5 "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 16px 14px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+h1.title { font-size: 15px; letter-spacing: .3em; color: var(--dim); margin: 14px auto 0; text-align: center; }
+
+.status { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--dim); }
+.pill b { color: var(--fg); font-weight: 600; }
+.pill.hp b { color: #ff8f8f; }
+
+.tutorial {
+  margin: 0; padding: 9px 12px; font-size: 13px; cursor: pointer;
+  background: #23262d; border-left: 3px solid var(--accent); color: #d9dde4;
+}
+
+.field-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.label { font-size: 12px; letter-spacing: .18em; color: var(--dim); }
+
+.slots { display: inline-flex; gap: 3px; }
+.slot { width: 14px; height: 8px; background: #2a2e36; border-radius: 2px; }
+.slot-on { background: var(--accent); }
+.slots-num { font-size: 12px; color: var(--dim); }
+.slots-num.is-full { color: #ff8f8f; }
+
+/* ── 필드 ── */
+.field, .lane, .codex { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.cards { display: flex; flex-wrap: wrap; gap: var(--gap); align-items: stretch; min-height: 78px; }
+.empty { color: var(--dim); font-size: 13px; margin: 4px 0; }
+
+.card {
+  /* 폭이 slot_cost에 비례한다 → 7칸 압박이 눈에 보인다 */
+  width: calc(var(--slot) * var(--w) + var(--gap) * (var(--w) - 1));
+  min-height: 74px;
+  border: 1px solid hsl(var(--hue) 40% 42%);
+  border-radius: 8px;
+  background: hsl(var(--hue) 34% 24%);
+  color: var(--fg);
+  cursor: pointer;
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 8px; font: inherit; text-align: left;
+  transition: transform .09s ease, box-shadow .09s ease;
+}
+.card:hover { transform: translateY(-2px); }
+.card .card-name { font-size: 15px; font-weight: 600; }
+.card .card-cost { font-size: 11px; color: var(--dim); }
+.card.t-B { border-width: 2px; }
+.card.t-C { border-width: 2px; border-color: var(--accent); box-shadow: inset 0 0 0 1px hsl(45 90% 60% / .25); }
+.card.is-sel { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mode-discard .card { border-style: dashed; }
+.mode-discard .card:hover { background: #4a2326; border-color: #ff8f8f; }
+
+@keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+.card.shake { animation: shake .32s; }
+
+/* ── 적 레인 ── */
+.lane-row { display: flex; align-items: center; gap: 8px; min-height: 24px; border-top: 1px dashed #262a32; }
+.lane-row:first-of-type { border-top: 0; }
+.lane-n { width: 18px; font-size: 11px; color: #5f6672; text-align: right; }
+.lane-slot { display: flex; gap: 6px; flex-wrap: wrap; }
+.lane-you { border-top: 1px solid #ff8f8f55; }
+.lane-you .lane-n { color: #ff8f8f; }
+.enemy { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #34272b; border: 1px solid #4d383d; }
+.enemy b { color: #ff8f8f; }
+.enemy i { color: #7fd1ff; font-style: normal; }
+.enemy.is-boss { background: #3a2a3d; border-color: #6a4a72; }
+.enemy.is-stun { opacity: .6; }
+
+/* ── 조작 ── */
+.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { font: inherit; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line); background: #23262d; color: var(--fg); cursor: pointer; }
+.btn:hover { border-color: #3d444f; }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.primary { background: var(--accent); color: #1b1a16; border-color: var(--accent); font-weight: 600; }
+.btn.ghost { background: transparent; color: var(--dim); }
+.btn.is-on { border-color: #ff8f8f; color: #ff8f8f; }
+
+/* ── 도감 ── */
+.codex ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.codex li { display: flex; flex-direction: column; gap: 1px; font-size: 13px; }
+.codex-eq { color: #cfd4dc; }
+.codex-txt { color: var(--dim); font-size: 12px; }
+
+/* ── 연출 ── */
+.overlay { position: fixed; inset: 0; display: grid; place-items: center; background: #0b0c0ecc; z-index: 20; }
+.disc-card, .end-card {
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 12px;
+  padding: 26px 30px; max-width: 460px; text-align: center;
+}
+.disc-kicker { margin: 0; font-size: 11px; letter-spacing: .3em; color: var(--accent); }
+.disc-card h2, .end-card h2 { margin: 6px 0 10px; font-size: 26px; }
+.disc-text { margin: 0; color: #d6dae1; }
+.end-card { text-align: left; }
+.end-list { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; max-height: 40vh; overflow: auto; }
+.end-list b { color: var(--accent); }
+
+.toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  background: #2a2e36; border: 1px solid var(--line); color: var(--fg);
+  padding: 10px 16px; border-radius: 8px; font-size: 13px; z-index: 30;
+}
+
+#foot { text-align: center; font-size: 11px; color: #5f6672; padding-bottom: 20px; }

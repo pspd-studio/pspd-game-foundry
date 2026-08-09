@@ -13,10 +13,14 @@
  *   - 한 판에서 발견물을 몇 종류나 보는지 (이 게임의 재미 자체)
  * 를 숫자로 뽑는다.
  *
+ * ★ 게임 규칙은 여기에 없다. src/core가 유일한 구현이고 이 파일은 그것을 돌려서
+ *   이벤트 스트림을 집계하는 계측기일 뿐이다. 브라우저 빌드도 같은 코어를 쓴다.
+ *
  * 주의: AI는 탐욕적으로 둔다. 사람 플레이어보다 약하다.
  * 절대값이 아니라 값을 바꿨을 때의 '변화 방향'을 보는 도구다.
  */
-import { loadData, pairKey, cardPower, fmtPct, makeRng, pick } from './lib.mjs';
+import { loadData, fmtPct } from './lib.mjs';
+import { playRunAuto, readSwitches } from '../src/core/index.ts';
 
 const D = loadData();
 const RUNS = Number(process.argv[2] ?? 1000);
@@ -32,7 +36,7 @@ for (const a of process.argv.slice(4)) {
   overrides.push(`${m[1]}=${m[2]}`);
 }
 
-const DISCARD = D.rules.discard_per_turn ?? 0;
+const DISCARD = readSwitches(D.rules).discard_per_turn;
 
 const stats = {
   wins: 0, losses: 0, turns: 0, combos: 0, maxChain: 0,
@@ -40,177 +44,42 @@ const stats = {
   cardSeen: new Map(D.cards.map((c) => [c.id, 0])),
   slotOccupancy: [], hpLeft: [],
   discovKinds: [], discovTierC: [], drawTries: 0, drawSkipped: 0, discarded: 0,
+  failedCombines: 0,
 };
 
-function usedSlots(field) {
-  return field.reduce((s, c) => s + c.slot_cost, 0);
-}
-
-function applyEffects(card, state) {
-  for (const id of card.effects || []) {
-    const e = D.effectById.get(id);
-    if (!e) continue;
-    const alive = () => state.enemies.filter((x) => x.hp > 0);
-    switch (e.category) {
-      case 'attack': {
-        const targets = e.target === 'enemy_all' ? alive()
-          : e.target === 'enemy_row' ? alive().slice(0, 2)
-          : alive().slice(0, 1);
-        for (const t of targets) {
-          if (e.params.hp_max != null) { if (t.hp <= e.params.hp_max) t.hp = 0; }
-          else t.hp -= e.params.amount ?? 0;
-        }
-        break;
-      }
-      case 'control': {
-        const targets = e.target === 'enemy_all' ? alive() : alive().slice(0, 1);
-        for (const t of targets) {
-          if (e.params.turns) t.stunned = (t.stunned ?? 0) + e.params.turns;
-          if (e.params.cells) t.row += e.params.cells;
-          if (id === 'cancel_action') t.stunned = (t.stunned ?? 0) + 1;
-        }
-        break;
-      }
-      case 'card': {
-        if (id === 'card_draw_2') state.pendingDraw += 2;
-        if (id === 'slot_free_1') state.bonusSlots += 1;
-        if (id === 'card_add_random') state.pendingDraw += 1;
-        break;
-      }
-      case 'survive': {
-        if (e.params.amount) state.hp = Math.min(D.rules.player_hp, state.hp + e.params.amount);
-        break;
-      }
-    }
-  }
-}
-
-function hasPartner(field, i) {
-  for (let j = 0; j < field.length; j++) {
-    if (i === j) continue;
-    if (D.recipeByKey.has(pairKey(field[i].id, field[j].id))) return true;
-  }
-  return false;
-}
-
-/**
- * 버리기: 조합 상대가 하나도 없는 카드를 최대 n장 버린다.
- * 사람이라면 "이건 쓸 데가 없다"고 판단해 버릴 카드만 버리는 보수적 모델이다.
- * 상대가 있는 카드까지 버리는 공격적 플레이는 이보다 더 잘 나올 수 있다.
- */
-function discardDead(field, n) {
-  let removed = 0;
-  for (let d = 0; d < n; d++) {
-    let idx = -1;
-    for (let i = 0; i < field.length; i++) if (!hasPartner(field, i)) { idx = i; break; }
-    if (idx < 0) break;
-    field.splice(idx, 1);
-    removed++;
-  }
-  return removed;
-}
-
-function findBestCombo(field) {
-  let best = null;
-  for (let i = 0; i < field.length; i++) {
-    for (let j = i + 1; j < field.length; j++) {
-      const r = D.recipeByKey.get(pairKey(field[i].id, field[j].id));
-      if (!r) continue;
-      const result = D.cardById.get(r.result);
-      const gain = cardPower(result, D.effectById)
-        - cardPower(field[i], D.effectById) * 0.4
-        - cardPower(field[j], D.effectById) * 0.4;
-      if (!best || gain > best.gain) best = { i, j, r, result, gain };
-    }
-  }
-  return best;
-}
-
-/** 한 판이 끝날 때 '그 판에서 몇 종류를 발견했는가'를 기록한다. 이 게임의 재미 지표다. */
-function finishRun(discovered) {
-  stats.discovKinds.push(discovered.size);
-  stats.discovTierC.push([...discovered].filter((id) => D.cardById.get(id).tier === 'C').length);
-}
-
-function runOne(seed) {
-  const rng = makeRng(seed);
-  const region = pick(D.regions, rng);
-  const pool = region.card_pool;
-
-  const state = {
-    hp: D.rules.player_hp, pendingDraw: 0, bonusSlots: 0,
-    enemies: region.enemy_pool.map((id, k) => {
-      const e = D.enemyById.get(id);
-      return { ...e, hp: e.hp, row: e.start_row + k, stunned: 0 };
-    }),
-  };
-
-  const field = [];
-  const discovered = new Set();
-  const draw = (n) => {
-    for (let k = 0; k < n; k++) {
+/** 코어가 흘리는 이벤트를 지표로 접는다. 여기가 3단계 Supabase 전송이 붙을 자리와 같은 seam이다. */
+function collect(e) {
+  switch (e.t) {
+    case 'draw':
       stats.drawTries++;
-      const cap = D.rules.field_slots + state.bonusSlots;
-      const c = D.cardById.get(pick(pool, rng));
-      if (usedSlots(field) + c.slot_cost > cap) { stats.drawSkipped++; continue; }
-      field.push(c);
-      stats.cardSeen.set(c.id, stats.cardSeen.get(c.id) + 1);
-    }
-  };
-  draw(D.rules.starting_hand);
-
-  let turn = 0;
-  while (turn < 30) {
-    turn++;
-    // 조합 단계 — 횟수 제한 없음
-    let chain = 0;
-    while (chain < 25) {
-      const best = findBestCombo(field);
-      if (!best || best.gain <= 0) break;
-      const cap = D.rules.field_slots + state.bonusSlots;
-      const after = usedSlots(field) - field[best.i].slot_cost - field[best.j].slot_cost + best.result.slot_cost;
-      if (after > cap) break;
-      field.splice(best.j, 1);
-      field.splice(best.i, 1);
-      field.push(best.result);
-      applyEffects(best.result, state);
-      stats.recipeUse.set(best.r.id, stats.recipeUse.get(best.r.id) + 1);
-      discovered.add(best.result.id);
-      chain++;
-    }
-    stats.combos += chain;
-    if (chain > stats.maxChain) stats.maxChain = chain;
-
-    // 버리기 단계 — 조합 상대가 없는 카드를 치운다
-    if (DISCARD > 0) stats.discarded += discardDead(field, DISCARD);
-
-    stats.slotOccupancy.push(usedSlots(field) / D.rules.field_slots);
-
-    if (state.enemies.every((e) => e.hp <= 0)) { stats.wins++; stats.turns += turn; stats.hpLeft.push(state.hp); finishRun(discovered); return; }
-
-    // 적 행동
-    for (const e of state.enemies) {
-      if (e.hp <= 0) continue;
-      if (e.stunned > 0) { e.stunned--; continue; }
-      if (e.row > 0) e.row -= e.behavior === 'slow_heavy' && turn % 2 === 0 ? 0 : 1;
-      if (e.row <= 0) {
-        state.hp -= e.behavior === 'slow_heavy' ? D.rules.enemy_reach_damage_heavy : D.rules.enemy_reach_damage;
-        // enemy_on_reach: despawn 이면 도달과 동시에 사라진다 → 전투가 성립하지 않는다(승률 100%).
-        if (D.rules.enemy_on_reach === 'despawn') e.hp = 0;
-      }
-      if (e.behavior === 'steal_card' && field.length) field.splice(Math.floor(rng() * field.length), 1);
-    }
-    if (state.hp <= 0) { stats.losses++; stats.turns += turn; finishRun(discovered); return; }
-
-    // 공급
-    state.bonusSlots = 0;
-    draw(D.rules.supply_candidates_per_turn + state.pendingDraw);
-    state.pendingDraw = 0;
+      if (e.accepted) stats.cardSeen.set(e.card, stats.cardSeen.get(e.card) + 1);
+      else stats.drawSkipped++;
+      break;
+    case 'combine_ok':
+      stats.combos++;
+      stats.recipeUse.set(e.recipe, stats.recipeUse.get(e.recipe) + 1);
+      if (e.chain_index > stats.maxChain) stats.maxChain = e.chain_index;
+      break;
+    case 'combine_fail':
+      if (e.reason === 'no_recipe') stats.failedCombines++;
+      break;
+    case 'discard':
+      if (e.by === 'ai_dead_card') stats.discarded++;
+      break;
+    case 'turn_end':
+      stats.slotOccupancy.push(e.occupancy);
+      break;
+    case 'run_end':
+      if (e.result === 'win') { stats.wins++; stats.hpLeft.push(e.hp_left); }
+      else stats.losses++;
+      stats.turns += e.turn;
+      stats.discovKinds.push(e.discovered.length);
+      stats.discovTierC.push(e.discovered.filter((id) => D.cardById.get(id).tier === 'C').length);
+      break;
   }
-  stats.losses++; stats.turns += turn; finishRun(discovered);
 }
 
-for (let i = 0; i < RUNS; i++) runOne(SEED + i * 7919);
+for (let i = 0; i < RUNS; i++) playRunAuto(D, SEED + i * 7919, collect);
 
 const total = stats.wins + stats.losses;
 const avg = (a) => a.reduce((s, x) => s + x, 0) / (a.length || 1);
