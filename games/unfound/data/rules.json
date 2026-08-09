@@ -1,0 +1,22 @@
+{
+  "_comment": "튜닝 손잡이. 밸런스를 만질 때는 코드가 아니라 이 파일만 고친다. 값을 바꾼 이유를 반드시 changelog에 남긴다.",
+  "field_slots": 7,
+  "starting_hand": 7,
+  "supply_candidates_per_turn": 3,
+  "combine_limit_per_turn": null,
+  "player_hp": 20,
+  "enemy_reach_damage": 2,
+  "enemy_reach_damage_heavy": 4,
+  "enemy_on_reach": "persist",
+  "failed_combine_cost": "none",
+  "changelog": [
+    { "date": "2026-08-09", "change": "초기값 설정. 기획 v0.1 부록 기준.", "by": "PSPD" },
+    { "date": "2026-08-09", "change": "카드에 slot_cost 도입. 강한 결과물은 2~3칸을 차지해 연쇄가 길어질수록 필드가 조여들게 함.", "by": "PSPD" }
+  ],
+  "undecided": [
+    "적이 플레이어 영역에 도달한 뒤 사라지는가(despawn) 남아서 매 턴 때리는가(persist). 현재 persist로 가정. 시뮬레이션에서 despawn이면 승률 100%가 나와 전투가 성립하지 않았다.",
+    "적 하강 타이머를 유지할지 여부 (실험 비용과 한 세트로 결정)",
+    "미발견 조합 실패에 시간 비용을 붙일지 (브루트포스 방지)",
+    "버린 카드의 열화 시스템 적용 여부"
+  ]
+}

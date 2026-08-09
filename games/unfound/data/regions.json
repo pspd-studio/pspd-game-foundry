@@ -1,0 +1,27 @@
+{
+  "_comment": "지역은 난이도뿐 아니라 '무엇을 발견할 수 있는가'를 정한다. 완전 랜덤이 아니라 예측 가능한 랜덤성을 만드는 장치다.",
+  "regions": [
+    {
+      "id": "forest", "name_ko": "숲", "difficulty": 1,
+      "card_pool": ["seed", "branch", "water", "mushroom", "snail", "feather", "bone"],
+      "enemy_pool": ["e_spider", "e_spawner", "e_thief"],
+      "theme_tags": ["plant", "creature", "life", "poison"]
+    },
+    {
+      "id": "ruins", "name_ko": "폐허", "difficulty": 2,
+      "card_pool": ["stone", "metal", "paper", "ink", "bone", "candle", "star"],
+      "enemy_pool": ["e_thief", "e_golem", "e_witch"],
+      "theme_tags": ["mineral", "craft", "record", "death"]
+    },
+    {
+      "id": "volcano", "name_ko": "화산", "difficulty": 3,
+      "card_pool": ["fire", "stone", "metal", "lightning", "bone"],
+      "enemy_pool": ["e_golem", "e_witch", "e_spawner"],
+      "theme_tags": ["heat", "energy", "mineral"]
+    }
+  ],
+  "map_shape": {
+    "_comment": "노드 선택형. 각 노드는 예상 적 유형·카드 테마·난이도를 미리 보여준다.",
+    "layers": [["forest"], ["ruins", "volcano"], ["ruins", "volcano"], ["boss"]]
+  }
+}

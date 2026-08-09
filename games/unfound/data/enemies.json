@@ -1,0 +1,11 @@
+{
+  "_comment": "적은 HP를 깎는 존재가 아니라 '조합 문제'를 던지는 존재다. behavior는 시뮬레이터가 읽는 식별자이며, 새 behavior를 늘릴 때는 반드시 기획 SSOT에 근거가 있어야 한다.",
+  "enemies": [
+    { "id": "e_thief",   "name_ko": "도둑",   "hp": 2, "speed": 1, "behavior": "steal_card",     "start_row": 4, "reward_tags": ["craft", "record"],   "note": "턴 종료 시 필드 카드 1장을 훔친다." },
+    { "id": "e_spider",  "name_ko": "거미",   "hp": 2, "speed": 1, "behavior": "bind_card",      "start_row": 4, "reward_tags": ["creature", "poison"], "note": "카드 1장을 2턴 동안 조합 불가로 묶는다." },
+    { "id": "e_witch",   "name_ko": "마녀",   "hp": 3, "speed": 1, "behavior": "block_recipe",   "start_row": 5, "reward_tags": ["concept", "poison"],  "note": "특정 태그의 조합을 1턴 막는다." },
+    { "id": "e_golem",   "name_ko": "골렘",   "hp": 6, "speed": 1, "behavior": "slow_heavy",     "start_row": 6, "reward_tags": ["mineral", "solid"],   "note": "2턴에 1칸만 내려오지만 도달 시 큰 피해." },
+    { "id": "e_spawner", "name_ko": "증식체", "hp": 3, "speed": 1, "behavior": "spawn_minion",   "start_row": 5, "reward_tags": ["life", "plant"],      "note": "2턴마다 HP 1 하수인을 만든다." },
+    { "id": "b_hollow",  "name_ko": "공동",   "hp": 10, "speed": 1, "behavior": "boss_hollow",   "start_row": 6, "reward_tags": ["concept", "rare"],    "note": "보스. 매 턴 필드에서 가장 비싼 카드를 무효화한다.", "is_boss": true }
+  ]
+}

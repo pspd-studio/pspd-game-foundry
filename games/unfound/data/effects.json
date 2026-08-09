@@ -1,0 +1,28 @@
+{
+  "_comment": "전투 효과 팔레트. 발견물은 이 효과들을 테마로 포장할 뿐, 새 효과를 함부로 늘리지 않는다. 카드는 반드시 여기 있는 id만 참조한다.",
+  "effects": [
+    { "id": "dmg_single_1", "name_ko": "단일 1 피해", "category": "attack", "target": "enemy_one", "params": { "amount": 1 }, "weight": 1.0 },
+    { "id": "dmg_single_2", "name_ko": "단일 2 피해", "category": "attack", "target": "enemy_one", "params": { "amount": 2 }, "weight": 2.0 },
+    { "id": "dmg_single_3", "name_ko": "단일 3 피해", "category": "attack", "target": "enemy_one", "params": { "amount": 3 }, "weight": 3.2 },
+    { "id": "dmg_aoe_1", "name_ko": "광역 1 피해", "category": "attack", "target": "enemy_all", "params": { "amount": 1 }, "weight": 2.6 },
+    { "id": "dmg_row_2", "name_ko": "같은 줄 2 피해", "category": "attack", "target": "enemy_row", "params": { "amount": 2 }, "weight": 2.8 },
+    { "id": "execute_low", "name_ko": "HP 1 이하 즉사", "category": "attack", "target": "enemy_one", "params": { "hp_max": 1 }, "weight": 1.4 },
+
+    { "id": "delay_1", "name_ko": "다음 행동 1턴 지연", "category": "control", "target": "enemy_one", "params": { "turns": 1 }, "weight": 1.8 },
+    { "id": "push_1", "name_ko": "1칸 뒤로 밀기", "category": "control", "target": "enemy_one", "params": { "cells": 1 }, "weight": 1.6 },
+    { "id": "push_all_1", "name_ko": "전체 1칸 뒤로 밀기", "category": "control", "target": "enemy_all", "params": { "cells": 1 }, "weight": 3.0 },
+    { "id": "cancel_action", "name_ko": "행동 취소", "category": "control", "target": "enemy_one", "params": {}, "weight": 2.0 },
+    { "id": "seal_2", "name_ko": "2턴 봉인", "category": "control", "target": "enemy_one", "params": { "turns": 2 }, "weight": 2.4 },
+
+    { "id": "card_copy", "name_ko": "카드 1장 복제", "category": "card", "target": "field_one", "params": { "count": 1 }, "weight": 2.0 },
+    { "id": "card_draw_2", "name_ko": "공급 후보 2장 추가", "category": "card", "target": "self", "params": { "count": 2 }, "weight": 1.8 },
+    { "id": "card_add_random", "name_ko": "지역 카드 1장 획득", "category": "card", "target": "self", "params": { "count": 1 }, "weight": 1.2 },
+    { "id": "card_remove", "name_ko": "필드 카드 1장 제거", "category": "card", "target": "field_one", "params": { "count": 1 }, "weight": 0.6 },
+    { "id": "slot_free_1", "name_ko": "이번 턴 슬롯 1칸 확장", "category": "card", "target": "self", "params": { "slots": 1 }, "weight": 1.5 },
+    { "id": "card_protect", "name_ko": "카드 1장 보호", "category": "card", "target": "field_one", "params": { "turns": 2 }, "weight": 1.2 },
+
+    { "id": "heal_1", "name_ko": "HP 1 회복", "category": "survive", "target": "self", "params": { "amount": 1 }, "weight": 2.0 },
+    { "id": "status_clear", "name_ko": "상태이상 제거", "category": "survive", "target": "self", "params": {}, "weight": 1.0 },
+    { "id": "reflect_1", "name_ko": "다음 피격 1회 반사", "category": "survive", "target": "self", "params": { "count": 1 }, "weight": 1.8 }
+  ]
+}

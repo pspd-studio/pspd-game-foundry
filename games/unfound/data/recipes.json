@@ -1,0 +1,25 @@
+{
+  "_comment": "레시피. inputs는 순서 무관 2장. conditions는 지금은 전부 비어 있지만, 나중에 '2회차부터 발견이 사라지는 문제'를 조건부 레시피로 풀 때를 위해 스키마에 미리 뚫어둔 자리다. discovery_text는 발견 순간 플레이어에게 보여줄 한 줄.",
+  "recipes": [
+    { "id": "r_axe",        "inputs": ["branch", "metal"],     "result": "axe",       "conditions": [], "discovery_text": "손잡이와 날이 만나 도구가 되었다." },
+    { "id": "r_torch",      "inputs": ["branch", "candle"],    "result": "torch",     "conditions": [], "discovery_text": "불씨를 옮길 수 있게 되었다." },
+    { "id": "r_potion",     "inputs": ["water", "mushroom"],   "result": "potion",    "conditions": [], "discovery_text": "우려낸 물에서 냄새가 달라졌다." },
+    { "id": "r_time",       "inputs": ["lightning", "snail"],  "result": "time",      "conditions": [], "discovery_text": "가장 빠른 것과 가장 느린 것 사이에서, 시간이 드러났다." },
+    { "id": "r_trap",       "inputs": ["metal", "bone"],       "result": "trap",      "conditions": [], "discovery_text": "무언가를 붙잡아 두는 구조가 만들어졌다." },
+    { "id": "r_map",        "inputs": ["paper", "ink"],        "result": "map",       "conditions": [], "discovery_text": "가본 곳이 남기 시작했다." },
+    { "id": "r_mirror",     "inputs": ["star", "water"],       "result": "mirror",    "conditions": [], "discovery_text": "물 위에 뜬 별을 보고, 비친다는 것을 알았다." },
+    { "id": "r_compass",    "inputs": ["metal", "star"],       "result": "compass",   "conditions": [], "discovery_text": "바늘이 늘 같은 별을 가리킨다." },
+    { "id": "r_telescope",  "inputs": ["metal", "mirror"],     "result": "telescope", "conditions": [], "discovery_text": "먼 것이 가까워졌다." },
+    { "id": "r_storm",      "inputs": ["water", "lightning"],  "result": "storm",     "conditions": [], "discovery_text": "하늘이 한꺼번에 쏟아진다." },
+    { "id": "r_memory",     "inputs": ["feather", "ink"],      "result": "memory",    "conditions": [], "discovery_text": "적어둔 것은 잊히지 않는다." },
+    { "id": "r_eclipse",    "inputs": ["time", "star"],        "result": "eclipse",   "conditions": [], "discovery_text": "정해진 시각에만 일어나는 일이 있다." },
+    { "id": "r_mushroom",   "inputs": ["bone", "water"],       "result": "mushroom",  "conditions": [], "discovery_text": "남은 것 위에서 새것이 자란다." },
+    { "id": "r_branch",     "inputs": ["seed", "water"],       "result": "branch",    "conditions": [], "discovery_text": "기다리면 자란다." },
+    { "id": "r_metal",      "inputs": ["fire", "stone"],       "result": "metal",     "conditions": [], "discovery_text": "돌 속에 다른 것이 섞여 있었다." },
+    { "id": "r_star",       "inputs": ["mirror", "candle"],    "result": "star",      "conditions": [], "discovery_text": "작은 불빛도 비추면 별이 된다." },
+    { "id": "r_map2",       "inputs": ["snail", "paper"],      "result": "map",       "conditions": [], "discovery_text": "지나간 자리가 그대로 길이 되었다." },
+    { "id": "r_paper",      "inputs": ["axe", "branch"],       "result": "paper",     "conditions": [], "discovery_text": "나무를 얇게 만들면 기록할 수 있다." },
+    { "id": "r_memory2",    "inputs": ["compass", "map"],      "result": "memory",    "conditions": [], "discovery_text": "어디였는지 아는 순간, 그날이 떠올랐다." },
+    { "id": "r_metal2",     "inputs": ["axe", "stone"],        "result": "metal",     "conditions": [], "discovery_text": "깨진 단면에서 빛이 났다." }
+  ]
+}

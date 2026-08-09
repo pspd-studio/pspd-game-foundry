@@ -1,0 +1,13 @@
+{
+  "name": "unfound",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "카드 조합 발견 로그라이크",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "validate": "node tools/validate.mjs",
+    "sim": "node tools/simulate.mjs 2000 42",
+    "check": "npm run validate && npm run sim"
+  }
+}
