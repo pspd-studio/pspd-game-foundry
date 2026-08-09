@@ -61,8 +61,37 @@ console.log(`숲 도달 가능 레시피: ${reach.length}/${D.recipes.length}`);
 const greedy = scenario('greedy');
 const reasoner = scenario('reasoner');
 const preknown = scenario('preknown');
-const unlock50 = scenario('reasoner', { preknownFraction: 0.5 });
-const unlock100 = scenario('reasoner', { preknownFraction: 1.0 });
+// 회차 곡선: 같은 플레이어가 런을 거듭 — 계정 도감(발견한 레시피)이 다음 런에 이월 (로그라이트 해금 모델)
+function career(players, runsEach) {
+  // 해금 = 공간 (SSOT/PSPD 확정): 런 3+에 폐허, 런 5+에 화산 해금. 플레이어는 미발견 레시피가 가장 많은 지역을 고른다.
+  const byRun = Array.from({ length: runsEach }, () => ({ runs: 0, fails: 0 }));
+  for (let p = 0; p < players; p++) {
+    let carry = [];
+    for (let r = 0; r < runsEach; r++) {
+      const unlockedN = r < 2 ? 1 : r < 4 ? 2 : 3;
+      // 지역 선택: 계약을 이기려는 플레이어의 선택 — 아는 레시피가 가장 많되 발견거리(미지 2개 이상)가 남은 지역.
+      // 남은 미지가 2개 미만이면 프런티어(미지 최다)로 이동한다.
+      let regionIdx = 0, bestKnown = -1, frontierIdx = 0, frontierUnknown = -1, found = false;
+      for (let g = 0; g < unlockedN; g++) {
+        const rs = reachableRecipes(D, D.regions[g]);
+        const unknown = rs.filter((rc) => !carry.includes([rc.inputs[0], rc.inputs[1]].sort().join('+'))).length;
+        const knownN = rs.length - unknown;
+        if (unknown > frontierUnknown) { frontierUnknown = unknown; frontierIdx = g; }
+        if (unknown >= 2 && knownN > bestKnown) { bestKnown = knownN; regionIdx = g; found = true; }
+      }
+      if (!found) regionIdx = frontierIdx;
+      playEconRun(D, SEED + (p * runsEach + r) * 7919, 'reasoner', (e) => {
+        if (e.t === 'run_end') {
+          byRun[r].runs++;
+          if (e.runFail) byRun[r].fails++;
+          carry = e.knownKeys;
+        }
+      }, { carryKnown: carry, regionIdx });
+    }
+  }
+  return byRun.map((x) => x.fails / x.runs);
+}
+const careerCurve = career(Math.max(50, Math.floor(RUNS / 8)), 8);
 const satOff = scenario('greedy', { saturationOff: true });
 const fullCodex = scenario('reasoner', { fullCodex: true });
 
@@ -80,16 +109,16 @@ console.log('\n[시나리오]');
 const fGreedy = row('탐욕(스캔)', greedy);
 const fReason = row('추론(단서)', reasoner);
 row('선지식(5개)', preknown);
-const f50 = row('해금 50%', unlock50);
-const f100 = row('해금 100%', unlock100);
+console.log('회차 곡선(실패율)  ' + careerCurve.map((f, i) => `런${i + 1} ${(f * 100).toFixed(0)}%`).join('  '));
 row('포화 OFF', satOff);
 row('도감 100%', fullCodex);
 
 console.log('\n[킬 라인 판정]');
 const okFail = fReason >= 0.30 && fReason <= 0.50;
 console.log(`  1. 추론 AI 런 실패율 30~50%      → ${fmtPct(fReason)}  ${okFail ? 'O' : 'X'}`);
-const mono = fReason > f50 && f50 > f100 && (fReason - f100) >= 0.15;
-console.log(`     해금 모사 단조감소(낙폭≥15%p)  → ${fmtPct(fReason)} > ${fmtPct(f50)} > ${fmtPct(f100)}  ${mono ? 'O' : 'X'}`);
+const earlyF = (careerCurve[0] + careerCurve[1]) / 2, lateF = (careerCurve[5] + careerCurve[6] + careerCurve[7]) / 3;
+const mono = earlyF >= 0.30 && earlyF <= 0.50 && lateF >= 0.15 && lateF <= 0.25 && (earlyF - lateF) >= 0.15;
+console.log(`     회차 곡선: 런1~2 30~50% → 런6~8 15~25% (낙폭≥15%p) → ${fmtPct(earlyF)} → ${fmtPct(lateF)}  ${mono ? 'O' : 'X'}`);
 const preRate = preknown.fulfilled / preknown.contracts;
 console.log(`  2. 선지식 AI 계약 달성률 < 40%   → ${fmtPct(preRate)}  ${preRate < 0.40 ? 'O' : 'X'}`);
 const cScan = avg(greedy.firstC), cClue = avg(reasoner.firstC);

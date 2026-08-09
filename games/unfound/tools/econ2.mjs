@@ -88,12 +88,13 @@ export function playEconRun(D, seed, policy, emit, opts = {}) {
   const R = readEconRules(D.rules);
   const rng = makeRng(seed);
   const aff = buildAffinity(D);
-  const region = D.regions[0]; // 숲 고정 (G2 기준선. 지역 로테이션은 G3)
+  const region = D.regions[opts.regionIdx ?? 0]; // 기본 숲. 회차 곡선에서는 해금된 지역 중 선택
   const reach = reachableRecipes(D, region);
 
   // ── 사전 지식 (해금 모사 / 선지식 AI) ─────────────────────────
   const known = new Set(); // 발동 가능해진 레시피 key
   const codex = new Set(); // 이 런에서 발견(결과물 종류)
+  if (opts.carryKnown) for (const k of opts.carryKnown) known.add(k);
   if (opts.fullCodex) for (const r of reach) known.add(pairKey(r.inputs[0], r.inputs[1]));
   else if (policy === 'preknown') {
     // 시장에서 바로 구할 수 있는(풀 내 tier A) 재료 2장짜리 고가 레시피 5개 — "아는 장사" 모델
@@ -266,7 +267,7 @@ export function playEconRun(D, seed, policy, emit, opts = {}) {
       if (c.kind === 'tier_count') idx = field.findIndex((id) => D.cardById.get(id).tier === c.tier);
       else if (c.kind === 'distinct_tier') idx = field.findIndex((id) => D.cardById.get(id).tier === c.tier && !c.kindsDone.has(id));
       else if (c.kind === 'discovery') idx = field.findIndex((id) => D.cardById.get(id).tier !== 'A' && codex.has(id) && !initialResults.has(id));
-      else idx = field.findIndex((id) => c.options.includes(id));
+      else idx = field.findIndex((id) => c.options.includes(id) && (!c.distinct || !c.kindsDone.has(id)));
       // reasoner는 계약을 우선하고, greedy는 팔 물건이 남을 때만 납품
       if (idx >= 0 && (policy !== 'greedy' || field.filter((id) => D.cardById.get(id).tier !== 'A').length > 1)) {
         c.kindsDone.add(field[idx]);
@@ -292,7 +293,7 @@ export function playEconRun(D, seed, policy, emit, opts = {}) {
           if (c.kind === 'distinct_tier') return x.card.tier === c.tier && !c.kindsDone.has(x.id);
           if (c.kind === 'discovery') return codex.has(x.id) && !initialResults.has(x.id);
           if (c.kind === 'gold') return false;
-          return c.options.includes(x.id);
+          return c.options.includes(x.id) && (!c.distinct || !c.kindsDone.has(x.id));
         });
       }) ?? null;
     }
@@ -361,6 +362,6 @@ export function playEconRun(D, seed, policy, emit, opts = {}) {
     topShare: totalRevenue ? topRevenue / totalRevenue : 0,
     earlyGoldRate: (goldCurve[6]?.gold ?? gold) / 7,
     lateGoldRate: (gold - (goldCurve[goldCurve.length - 8]?.gold ?? 0)) / 7,
-    combosLast3: combosTotal - combosLast3, soldKinds: soldKinds.size,
+    combosLast3: combosTotal - combosLast3, soldKinds: soldKinds.size, knownKeys: [...known],
   });
 }
