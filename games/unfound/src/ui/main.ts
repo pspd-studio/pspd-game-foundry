@@ -11,14 +11,18 @@ import type { GameState } from '../core/index.ts';
 import { boardHTML, esc } from './view.ts';
 import type { ViewModel } from './view.ts';
 import { createLogger } from './log.ts';
+import { attachRemote, remoteEnabled } from './remote.ts';
 
 const root = document.getElementById('app')!;
 const fx = document.getElementById('fx')!;
 const logger = createLogger();
 
-// ?log=1 이면 이벤트를 콘솔로도 흘린다. 3단계에서는 여기에 전송 sink를 하나 더 붙인다.
+// ?log=1 이면 이벤트를 콘솔로도 흘린다.
 const params = new URLSearchParams(location.search);
 if (params.get('log') === '1') logger.addSink((r) => console.log('[unfound]', r.ms, r.event.t, r.event));
+
+// 원격 전송. config.ts가 비어 있으면 아무 일도 하지 않는다 (게임은 그대로 돈다).
+attachRemote(logger);
 
 const vm: ViewModel = { selected: [], discardMode: false, tutorialStep: 0 };
 let st: GameState = newRun();
@@ -36,7 +40,10 @@ function newRun(): GameState {
 function render(): void {
   root.innerHTML = boardHTML(DATA, st, vm);
   const foot = document.getElementById('foot');
-  if (foot) foot.textContent = `세션 ${logger.session.slice(0, 8)} · ${logger.run}판 · 이벤트 ${logger.records.length}`;
+  if (foot) {
+    foot.textContent = `세션 ${logger.session.slice(0, 8)} · ${logger.run}판 · 이벤트 ${logger.records.length}`
+      + (remoteEnabled() ? ' · 기록 중' : '');
+  }
 }
 
 /* ── 연출 ─────────────────────────────────────────────────── */
