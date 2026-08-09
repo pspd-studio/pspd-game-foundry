@@ -16,6 +16,7 @@
     { "id": "feather",   "name_ko": "깃털",     "tier": "A", "tags": ["creature", "sky", "record"],    "slot_cost": 1, "effects": ["card_draw_2"] },
     { "id": "mushroom",  "name_ko": "버섯",     "tier": "A", "tags": ["plant", "poison", "life"],      "slot_cost": 1, "effects": ["dmg_single_1"] },
     { "id": "bone",      "name_ko": "뼈",       "tier": "A", "tags": ["creature", "solid", "death"],   "slot_cost": 1, "effects": ["dmg_single_1"] },
+    { "id": "wind",      "name_ko": "바람",     "tier": "A", "tags": ["sky", "energy", "fast"],        "slot_cost": 1, "effects": ["push_1"] },
 
     { "id": "axe",       "name_ko": "도끼",     "tier": "B", "tags": ["tool", "craft", "weapon"],      "slot_cost": 2, "effects": ["dmg_single_2"] },
     { "id": "torch",     "name_ko": "횃불",     "tier": "B", "tags": ["light", "heat", "tool"],        "slot_cost": 2, "effects": ["dmg_row_2"] },
@@ -27,6 +28,9 @@
     { "id": "mirror",    "name_ko": "거울",     "tier": "B", "tags": ["craft", "light", "concept"],    "slot_cost": 2, "effects": ["reflect_1"] },
     { "id": "glass",     "name_ko": "유리",     "tier": "B", "tags": ["craft", "light", "solid"],      "slot_cost": 2, "effects": ["card_protect", "status_clear"] },
     { "id": "shadow",    "name_ko": "그림자",   "tier": "B", "tags": ["light", "concept", "dark"],     "slot_cost": 2, "effects": ["seal_2"] },
+    { "id": "bell",      "name_ko": "종",       "tier": "B", "tags": ["craft", "metal", "sound"],      "slot_cost": 2, "effects": ["dmg_aoe_1"] },
+    { "id": "smoke",     "name_ko": "연기",     "tier": "B", "tags": ["sky", "energy", "dark"],        "slot_cost": 2, "effects": ["push_all_1"] },
+    { "id": "echo",      "name_ko": "메아리",   "tier": "B", "tags": ["sound", "concept"],             "slot_cost": 2, "effects": ["card_copy", "card_protect"] },
 
     { "id": "time",      "name_ko": "시간",     "tier": "C", "tags": ["concept", "rare"],              "slot_cost": 2, "effects": ["delay_1", "cancel_action"] },
     { "id": "memory",    "name_ko": "기억",     "tier": "C", "tags": ["concept", "record", "rare"],    "slot_cost": 2, "effects": ["card_copy", "card_draw_2"] },

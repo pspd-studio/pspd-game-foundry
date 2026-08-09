@@ -39,6 +39,17 @@
     { "id": "r_eclipse3",   "inputs": ["telescope", "time"],   "result": "eclipse",   "conditions": [], "discovery_text": "언제 겹칠지 미리 알 수 있었다." },
     { "id": "r_map2",       "inputs": ["snail", "paper"],      "result": "map",       "conditions": [], "discovery_text": "지나간 자리가 그대로 길이 되었다." },
     { "id": "r_mushroom2",  "inputs": ["seed", "bone"],        "result": "mushroom",  "conditions": [], "discovery_text": "묻은 것 위로 다른 것이 돋았다." },
-    { "id": "r_time3",      "inputs": ["trap", "lightning"],   "result": "time",      "conditions": [], "discovery_text": "붙잡아 둔 번개는 멈춘 순간이었다." }
+    { "id": "r_time3",      "inputs": ["trap", "lightning"],   "result": "time",      "conditions": [], "discovery_text": "붙잡아 둔 번개는 멈춘 순간이었다." },
+    { "id": "r_bell",       "inputs": ["metal", "wind"],       "result": "bell",      "conditions": [], "discovery_text": "매달아 둔 쇠가 저 혼자 울었다." },
+    { "id": "r_bell2",      "inputs": ["glass", "wind"],       "result": "bell",      "conditions": [], "discovery_text": "얇은 유리가 바람에 맑게 울었다." },
+    { "id": "r_smoke",      "inputs": ["fire", "wind"],        "result": "smoke",     "conditions": [], "discovery_text": "바람이 불을 흩자 검은 것이 퍼졌다." },
+    { "id": "r_smoke2",     "inputs": ["torch", "wind"],       "result": "smoke",     "conditions": [], "discovery_text": "불을 흔들자 앞이 보이지 않았다." },
+    { "id": "r_echo",       "inputs": ["bell", "shadow"],      "result": "echo",      "conditions": [], "discovery_text": "소리가 닿지 않는 자리에서 소리가 돌아왔다." },
+    { "id": "r_memory4",    "inputs": ["echo", "ink"],         "result": "memory",    "conditions": [], "discovery_text": "들은 것을 적어두자 그대로 남았다." },
+    { "id": "r_potion3",    "inputs": ["mushroom", "smoke"],   "result": "potion",    "conditions": [], "discovery_text": "연기에 말린 것은 오래 두어도 상하지 않았다." },
+    { "id": "r_eclipse4",   "inputs": ["smoke", "star"],       "result": "eclipse",   "conditions": [], "discovery_text": "연기가 하늘을 덮자 낮이 잠깐 밤이 되었다." },
+    { "id": "r_shadow3",    "inputs": ["wind", "candle"],      "result": "shadow",    "conditions": [], "discovery_text": "흔들리는 불빛이 벽을 움직였다." },
+    { "id": "r_map4",       "inputs": ["feather", "wind"],     "result": "map",       "conditions": [], "discovery_text": "바람에 실려 어디까지 가는지 보았다." },
+    { "id": "r_time4",      "inputs": ["shadow", "stone"],     "result": "time",      "conditions": [], "discovery_text": "돌에 드리운 그림자가 옮겨간 만큼이 지나갔다." }
   ]
 }
