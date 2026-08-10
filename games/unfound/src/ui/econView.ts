@@ -279,7 +279,11 @@ export function render(S: EconSession, V: ViewState): string {
       <div class="track">${turnTrack}</div>
     </div>
     <div class="gold"><b>${S.gold}</b>G</div>
-    <div class="slots">칸 ${S.used}/${S.R.fieldSlots}</div>
+    <div class="slots">
+      칸 ${S.used}/${S.R.fieldSlots}
+      <span class="gauge">${Array.from({ length: S.R.fieldSlots }, (_, i) =>
+        `<i class="${i < S.used ? 'on' : ''}"></i>`).join('')}</span>
+    </div>
     <button class="primary end" data-act="end">턴 종료</button>
   </div>
   <div class="cols">

@@ -49,6 +49,10 @@ html, body {
 .hud .track i.on { background: var(--ink); }
 .hud .gold { font-size: 20px; color: var(--coin); font-variant-numeric: tabular-nums; }
 .hud .slots { color: var(--ink-soft); }
+/* 좁은 화면에서 7칸 그리드가 4열로 접혀도 "7칸짜리 작업대"라는 선언은 남아야 한다 */
+.hud .slots .gauge { display: none; gap: 2px; margin-left: 6px; vertical-align: middle; }
+.hud .slots .gauge i { width: 8px; height: 8px; border: 1px solid var(--rule); background: #f6efe0; }
+.hud .slots .gauge i.on { background: var(--ink); border-color: var(--ink); }
 .hud .end { margin-left: auto; }
 
 /* ── 레이아웃 ─────────────────────────────────────────── */
@@ -215,3 +219,52 @@ button.link { background: none; border: none; padding: 0; text-decoration: under
 }
 
 #foot { margin: 0 20px 24px; font-size: 11px; color: var(--ink-soft); }
+
+/* ── 폰 ───────────────────────────────────────────────
+   테스터 열에 아홉은 링크를 폰에서 연다. 7열 그리드를 그대로 두면 카드가 45px로 눌려
+   이름도 태그도 안 읽힌다. 폰에서는 4열로 접고, 7칸이라는 사실은 HUD 게이지가 대신 말한다. */
+
+@media (max-width: 700px) {
+  html, body { font-size: 15px; }
+  .title { margin: 10px 12px 2px; font-size: 16px; }
+
+  .hud { margin: 0 12px 10px; padding: 8px 10px; gap: 10px; flex-wrap: wrap; }
+  .hud .turn { flex: 1 1 auto; }
+  .hud .track { display: none; }
+  .hud .slots .gauge { display: inline-flex; }
+  .hud .end { flex: 0 0 auto; padding: 10px 14px; }
+
+  .cols { padding: 0 12px 32px; gap: 10px; }
+  .panel { padding: 10px; }
+
+  /* 작업대: 4열. 슬롯 비용은 칸 수(span)와 카드에 적힌 숫자로 계속 보인다 */
+  .grid7 { grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .grid7 .card, .slot-empty { min-height: 78px; }
+  .card { padding: 7px 6px 5px; }
+  .cname { font-size: 14px; }
+  .tags i { font-size: 8px; }
+  /* 3칸짜리 카드가 4열을 다 먹지 않도록 상한을 둔다 */
+  .grid7 .card[style*="span 3"] { grid-column: span 3; }
+
+  .actions button { flex: 1 1 40%; padding: 10px 8px; }  /* 손가락 크기 */
+  .panel h2 .link { padding: 8px 4px; }                  /* 도감 펼치기 — 탭 영역 확보 */
+  .buyrow .buy { padding: 8px 10px; }
+
+  .contract { grid-template-columns: 34px 1fr; grid-template-rows: auto auto; }
+  .contract .seal { width: 32px; height: 32px; font-size: 9px; }
+  .contract button { grid-column: 1 / -1; padding: 9px; }
+
+  .draftrow { grid-template-columns: 1fr; gap: 6px; }
+  .draftrow .card { min-height: 0; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .draftrow .card .cprice { margin-top: 0; }
+
+  .sheet { padding: 18px 16px; margin: 12px; max-height: 88vh; overflow: auto; }
+  .log ul { max-height: 130px; }
+  #foot { margin: 0 12px 20px; }
+}
+
+/* 아주 좁은 폰 (~360px) */
+@media (max-width: 400px) {
+  .grid7 { grid-template-columns: repeat(3, 1fr); }
+  .grid7 .card[style*="span 3"] { grid-column: span 3; }
+}
