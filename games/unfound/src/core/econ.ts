@@ -90,6 +90,33 @@ export interface EconRules {
   midCountOffset: number;
   /** 중간 마감 턴 재배치 (SSOT v2.2 "중간 마감 10턴"). 0이면 계약 데이터 원본(8턴) 유지. */
   midDeadline: number;
+
+  /* ── v3.0 (2026-08-10 전면 개정 — 7칸 폐기) ─────────────────────
+     구 7칸 수치는 재현 대상이 아니다 (07 지시서: G2 재측정으로 대체). */
+
+  /** 펼침 자리 수 (시뮬 스윕 9~15). slot_cost는 펼침(더미의 맨 위)에서만 센다. */
+  spreadSlots: number;
+  /** 미발견 조합 시도 상한 — 턴당 고정 (SSOT: 6회 고정). */
+  unknownAttempts: number;
+  /** 견습이 드나들 수 있는 지역 수. 승급마다 +1 (승급 보상 = 공간 = 지역 출입권). */
+  regionsStart: number;
+  /** 이동에 드는 턴 수 (이동 중 조합 가능·시장 불가). */
+  moveTurns: number;
+  /** 파견 — 조수 임금 / 왕복 턴 / 보따리 장수 / 탐사 보따리 인물 확률. */
+  dispatchWage: number;
+  dispatchTurns: number;
+  dispatchBundle: number;
+  dispatchPersonChance: number;
+  /** 시장에서 떠도는 인물을 소개받는 값 (식객 획득 경로 '구매'). */
+  personPrice: number;
+  /** 도둑 식객 — 매 턴 금화. */
+  thiefGold: number;
+  /** 짐꾼 식객 — 경매 후보 추가 장수. */
+  porterExtra: number;
+  /** 소문쟁이 식객 — 수요 소등 지연 유닛. */
+  rumorDelay: number;
+  /** 계약 난이도 손잡이: late 계약 요구 수량 보정 (v3.0 — 무한 적재로 커진 생산력 보정). */
+  lateCountOffset: number;
 }
 
 /** 5급 명칭 (SSOT 장기 시계 — 견습→도제→공인→장인→명장). 데이터가 아니라 규칙 어휘라 여기 산다. */
@@ -153,7 +180,27 @@ export function readEconRules(rules: Rules): EconRules {
     onboardingFirstRunOnly: flag(rules, 'v22_onboarding_first_run_only', false),
     midCountOffset: num(rules, 'v22_mid_count_offset', 0),
     midDeadline: num(rules, 'v22_mid_deadline', 0),
+
+    // v3.0 — 값은 전부 rules.json이 정한다. 기본값은 지시서 초기값.
+    spreadSlots: num(rules, 'v3_spread_slots', 12),
+    unknownAttempts: num(rules, 'v3_unknown_attempts', 6),
+    regionsStart: num(rules, 'v3_regions_start', 2),
+    moveTurns: num(rules, 'v3_move_turns', 1),
+    dispatchWage: num(rules, 'v3_dispatch_wage', 6),
+    dispatchTurns: num(rules, 'v3_dispatch_turns', 3),
+    dispatchBundle: num(rules, 'v3_dispatch_bundle', 3),
+    dispatchPersonChance: num(rules, 'v3_dispatch_person_chance', 0.15),
+    personPrice: num(rules, 'v3_person_price', 15),
+    thiefGold: num(rules, 'v3_thief_gold', 2),
+    porterExtra: num(rules, 'v3_porter_extra', 1),
+    rumorDelay: num(rules, 'v3_rumor_delay', 1),
+    lateCountOffset: num(rules, 'v3_late_count_offset', 0),
   };
+}
+
+/** 이 등급에서 드나들 수 있는 지역 수 (승급 보상 = 공간 = 지역 출입권, v3.0 최소 구현). */
+export function unlockedRegionCount(R: EconRules, grade: number, total: number): number {
+  return Math.min(R.regionsStart + grade, total);
 }
 
 /* ── 계열(태그) 친화도 ───────────────────────────────────────── */
@@ -227,6 +274,27 @@ export function pairsOf(field: string[]): Array<[number, number]> {
   return out;
 }
 
+/* ── v3.0 솔리테어 필드 (펼침 자리 + 더미) ──────────────────────
+   더미(Pile) = 카드 배열, 마지막 원소가 맨 위(펼친 카드·앞면)다.
+   묻힌 카드(맨 위가 아닌 것)는 뒷면 — 계열 태그만 노출, 조합·판매·납품 후보 제외.
+   slot_cost는 펼친 카드에만 센다 (tier B는 펼치면 2자리, 더미 안에선 1장).
+   파내기는 무료·즉시 — 비용은 행동이 아니라 정보에 산다 (SSOT [v3.0] 필드 절). */
+
+export type Pile = string[];
+
+export function topOf(p: Pile): string { return p[p.length - 1]; }
+
+/** 펼친 카드들 (각 더미의 맨 위). 인덱스 = 더미 인덱스. */
+export function spreadOf(piles: Pile[]): string[] { return piles.map(topOf); }
+
+/** 펼침 자리 사용량 = 펼친 카드 slot_cost 합. 묻힌 카드는 0. */
+export function spreadUsed(D: GameData, piles: Pile[]): number {
+  return piles.reduce((s, p) => s + (D.cardById.get(topOf(p))?.slot_cost ?? 1), 0);
+}
+
+/** 필드의 모든 카드 (펼친 것 + 묻힌 것). */
+export function allCards(piles: Pile[]): string[] { return piles.flat(); }
+
 /* ── 가격 ────────────────────────────────────────────────────── */
 
 export interface PriceContext {
@@ -245,6 +313,8 @@ export interface PriceContext {
    * (SSOT 이벤트 덱 — "가격 배수는 곱셈이 아니라 max, 총 상한 ×4". 프리미엄 포함).
    */
   eventMultOf?: (card: Card) => number;
+  /** v3.0 소문쟁이 식객 — 수요 소등 지연 유닛 (포화 임계가 이만큼 늦게 온다). */
+  demandDelay?: number;
 }
 
 /**
@@ -260,7 +330,7 @@ export function priceOf(_D: GameData, R: EconRules, ctx: PriceContext, card: Car
     boost = Math.max(boost, R.firstPremium[tier] ?? 1);
   if (ctx.eventMultOf) boost = Math.max(boost, ctx.eventMultOf(card));
   p *= Math.min(boost, R.eventPriceCap);
-  const over = (ctx.tierSold[tier] ?? 0) - (R.demandPool[tier] ?? 99);
+  const over = (ctx.tierSold[tier] ?? 0) - (R.demandPool[tier] ?? 99) - (ctx.demandDelay ?? 0);
   if (!ctx.saturationOff && over >= 0) p *= Math.pow(R.saturationR, over + 1);
   return Math.round(p);
 }
@@ -302,8 +372,16 @@ export interface RunContract extends ContractDef {
   claimed: boolean;
 }
 
-/** v2.2 난이도 손잡이를 계약 한 건에 적용한다 (mid 수량 보정 + 중간 마감 재배치). */
-export function tuneContract(c: ContractDef, midCountOffset: number, midDeadline: number): ContractDef {
+/** 난이도 손잡이를 계약 한 건에 적용한다 (mid 수량·마감 + v3.0 late 수량). */
+export function tuneContract(
+  c: ContractDef, midCountOffset: number, midDeadline: number, lateCountOffset = 0,
+): ContractDef {
+  if (c.slot === 'late' && lateCountOffset !== 0) {
+    return {
+      ...c,
+      count: typeof c.count === 'number' ? Math.max(1, c.count + lateCountOffset) : c.count,
+    };
+  }
   if (c.slot !== 'mid') return c;
   return {
     ...c,
@@ -318,6 +396,7 @@ export function tuneContract(c: ContractDef, midCountOffset: number, midDeadline
  */
 export function rollContracts(
   file: ContractsFile, rng: () => number, midCountOffset = 0, claimed = true, midDeadline = 0,
+  lateCountOffset = 0,
 ): RunContract[] {
   const mids = file.contracts.filter((c) => c.slot === 'mid');
   const lates = file.contracts.filter((c) => c.slot === 'late');
@@ -329,7 +408,7 @@ export function rollContracts(
   };
   return [...pickN(mids, file.run_pick.mid), ...pickN(lates, file.run_pick.late)]
     .map((c) => ({
-      ...tuneContract(c, midCountOffset, midDeadline),
+      ...tuneContract(c, midCountOffset, midDeadline, lateCountOffset),
       delivered: 0, done: false, failed: false, kindsDone: new Set<string>(), claimed,
     }));
 }
@@ -428,11 +507,13 @@ export function rollStartingField(D: GameData, R: EconRules, region: Region, rng
 /**
  * 이번 턴 공급 후보 (턴 1~3은 push 3장, 이후는 이 중 1장 드래프트).
  * 후보끼리는 서로 다르게 뽑는다 — 같은 카드 3장을 놓고 "골라라"는 선택지가 아니다 (실측 1.2%).
+ * count는 짐꾼 식객(경매 후보 +1)용 — 없으면 R.supply.
  */
-export function rollSupply(R: EconRules, region: Region, rng: () => number): string[] {
+export function rollSupply(R: EconRules, region: Region, rng: () => number, count?: number): string[] {
   const out: string[] = [];
-  const maxDup = R.supplyDistinct ? 1 : R.supply;
-  for (let i = 0; i < R.supply; i++) out.push(drawFromPool(region, rng, out, maxDup));
+  const n = count ?? R.supply;
+  const maxDup = R.supplyDistinct ? 1 : n;
+  for (let i = 0; i < n; i++) out.push(drawFromPool(region, rng, out, maxDup));
   return out;
 }
 

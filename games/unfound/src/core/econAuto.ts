@@ -1,340 +1,496 @@
 /**
- * UNFOUND v2.1 — AI 자동 플레이 (G2 시뮬레이터의 정책 층).
+ * UNFOUND v3.0 — AI 자동 플레이 (G2 시뮬레이터의 정책 층).
  *
- * 규칙은 여기 없다. 전부 `econ.ts`에서 가져다 쓴다 — 이 파일에 있는 것은
- * "AI가 무엇을 고르는가"(정책)뿐이다. 사람 플레이(`econSession.ts`)와 규칙이 갈라지지 않게 하려는 것이다.
+ * v3.0부터 AI는 **사람과 같은 세션 코어(EconSession)를 그대로 운전한다** — 규칙 이중 구현 제거.
+ * 구 7칸 수치(35.1/31.1/45.7)의 난수 재현 제약이 사라졌기 때문에 가능해졌다
+ * (07 지시서: 규칙이 바뀌었으므로 G2 재측정으로 대체).
  *
- * 난수 호출 순서는 G2 측정치(36.0% / 29.4% / 40.5%, 시드 42·7)를 재현해야 하므로
- * 원본 tools/econ2.mjs와 **한 줄도 어긋나지 않게** 유지한다. 순서를 바꾸면 지표가 바뀐다.
+ * 행동 공간 (07 지시서 Phase 2): 적재 접근 · 이동 · 수주 선택 · 파견 · 식객 활용.
+ * 뒷면 정보 제약에 대해: 파내기가 무료라 기계적 제약은 펼침 용량뿐이고, AI는 자기가 묻은
+ * 카드를 기억한다 (사람도 자기가 쌓은 것은 기억한다). 뒷면의 정보 비용은 사람 화면에서
+ * 마찰로 작동하는 것이고, 시뮬 지표에는 "후보가 넓어질수록 전수 스캔이 비싸진다"로 나타난다.
  */
-import type { GameData } from './types.ts';
 import { makeRng } from './rng.ts';
 import {
-  affinityScore, buildAffinity, contractTargetIndex, neededByContract, pairKey, pairsOf,
-  priceOf, readEconRules, reachableRecipes, rollContracts, rollStartingField, rollSupply,
-  settleRun, slotUsed,
-  type ContractsFile, type PriceContext, type RunContract, type TierMap,
+  affinityScore, allCards, buildAffinity, pairKey, reachableRecipes, readEconRules, topOf,
+  type RunContract,
 } from './econ.ts';
-import { EventDeck } from './econEvents.ts';
+import {
+  EconSession, type DispatchDest, type EconData, type GuestsFile,
+} from './econSession.ts';
 
 export type EconPolicy = 'greedy' | 'reasoner' | 'preknown';
 
 export interface EconRunOpts {
-  preknownFraction?: number;
   saturationOff?: boolean;
   fullCodex?: boolean;
   regionIdx?: number;
   carryKnown?: string[];
-  /** v2.2 — 몇 번째 회기(런)인가. 온보딩 첫 런 한정·이벤트 침묵 규칙이 본다. 기본 1. */
+  /** 몇 번째 회기(런)인가. 온보딩 첫 런 한정·이벤트 침묵 규칙이 본다. 기본 1. */
   runIndex?: number;
+  /** 등급 (0=견습) — 지역 출입권. */
+  grade?: number;
+  guests?: GuestsFile;
 }
 
-export type EconEvent =
-  | { t: 'discover'; card: string; tier: string; turn: number }
-  | { t: 'sell'; card: string; gold: number; turn: number }
-  | { t: 'buy'; card: string; gold: number; turn: number }
-  | { t: 'contract_done'; id: string; turn: number }
-  | { t: 'supply_skipped' }
-  | { t: 'near_miss' }
-  | { t: 'discard' }
-  | { t: 'turn_end'; turn: number; occupancy: number; gold: number }
-  | { t: 'run_end'; [k: string]: unknown };
+/** 한 판의 결과 요약 — 시뮬레이터가 지표를 뽑는 유일한 창구. */
+export interface RunSummary {
+  runFail: boolean;
+  fulfilled: number;
+  contractsTotal: number;
+  gold: number;
+  settle: number;
+  discovered: number;
+  discoveredIds: string[];
+  combos: number;
+  turns: number;
+  occAvg: number;
+  giveUps: number;
+  firstSaleTurn: number;
+  firstCTurn: number;
+  topShare: number;
+  earlyGoldRate: number;
+  lateGoldRate: number;
+  combosLast3: number;
+  soldKinds: number;
+  knownKeys: string[];
+  newDiscov: number;
+  newDiscovC: number;
+  midDone: number;
+  midTotal: number;
+  maxChain: number;
+  guestsJoined: number;
+  guestTurns: number;
+  feeds: number;
+  strikes: number;
+  moves: number;
+  dispatches: number;
+  digs: number;
+  nearMisses: number;
+}
 
-/** 시뮬레이터가 넘겨주는 데이터 (GameData + contracts.json). */
-export type EconData = GameData & { contracts: ContractsFile };
+interface Stats { giveUps: number }
+
+/** (pi, di) — 카드의 첫 위치. 없으면 null. */
+function locate(S: EconSession, id: string): [number, number] | null {
+  for (let pi = 0; pi < S.piles.length; pi++) {
+    const di = S.piles[pi].indexOf(id);
+    if (di >= 0) return [pi, di];
+  }
+  return null;
+}
+
+/** 묻힌 카드면 그 더미 맨 위로 파낸다 (무료). */
+function makeTop(S: EconSession, pi: number, di: number): void {
+  if (di < S.piles[pi].length - 1) S.dig(pi, di);
+}
+
+/**
+ * 두 카드를 서로 다른 더미의 맨 위로 만든다 (조합 준비). 같은 더미에 있으면
+ * 하나를 펼치거나(unstack) 다른 더미로 옮긴다(restack). 실패하면 null.
+ */
+function bringTogether(S: EconSession, idA: string, idB: string): [number, number] | null {
+  let a = locate(S, idA);
+  let b = locate(S, idB);
+  if (!a || !b) return null;
+  if (a[0] === b[0]) {
+    makeTop(S, b[0], b[1]);
+    const bp = b[0];
+    if (!S.unstack(bp)) {
+      const other = S.piles.findIndex((p, k) => k !== bp && !S.isPersonLike(topOf(p)));
+      if (other < 0 || !S.restack(bp, other)) return null;
+    }
+    a = locate(S, idA);
+    b = locate(S, idB);
+    if (!a || !b || a[0] === b[0]) return null;
+  }
+  makeTop(S, a[0], a[1]);
+  makeTop(S, b[0], b[1]);
+  a = locate(S, idA);
+  b = locate(S, idB);
+  if (!a || !b) return null;
+  return [a[0], b[0]];
+}
+
+/** 이 카드가 이 계약에 납품 가능한가 (묻힌 카드 포함 — 파내면 되니까). */
+function matchesContract(S: EconSession, c: RunContract, id: string): boolean {
+  const card = S.card(id);
+  if (!card || S.isPersonLike(id)) return false;
+  if (c.kind === 'tier_count') return card.tier === c.tier;
+  if (c.kind === 'distinct_tier') return card.tier === c.tier && !c.kindsDone.has(id);
+  if (c.kind === 'discovery') return card.tier !== 'A' && S.codex.has(id) && !S.initialResults.has(id);
+  if (c.kind === 'gold') return false;
+  return (c.options ?? []).includes(id) && (!c.distinct || !c.kindsDone.has(id));
+}
 
 /**
  * 한 판 자동 플레이.
  * policy: 'greedy'(전수 스캔) | 'reasoner'(계약 역산+계열 단서) | 'preknown'(레시피 알고 발견 안 함)
  */
 export function playEconRun(
-  D: EconData, seed: number, policy: EconPolicy, emit: (e: EconEvent) => void, opts: EconRunOpts = {},
-): void {
+  D: EconData, seed: number, policy: EconPolicy, opts: EconRunOpts = {},
+): RunSummary {
   const R = readEconRules(D.rules);
-  const rng = makeRng(seed);
-  const aff = buildAffinity(D);
-  const region = D.regions[opts.regionIdx ?? 0]; // 기본 숲. 회차 곡선에서는 해금된 지역 중 선택
-  const reach = reachableRecipes(D, region);
+  // 정책 전용 난수 — 세션(규칙) 난수와 분리된 스트림
+  const prng = makeRng(((seed ^ 0x7f4a7c15) >>> 0) || 1);
+  const regionIdx = opts.regionIdx ?? 0;
+  const region = D.regions[regionIdx];
+  const grade = opts.grade ?? 0;
 
-  // ── 사전 지식 (해금 모사 / 선지식 AI) ─────────────────────────
-  const known = new Set<string>(); // 발동 가능해진 레시피 key
-  const codex = new Set<string>(); // 이 런에서 발견(결과물 종류)
-  if (opts.carryKnown) for (const k of opts.carryKnown) known.add(k);
-  if (opts.fullCodex) for (const r of reach) known.add(pairKey(r.inputs[0], r.inputs[1]));
-  else if (policy === 'preknown') {
+  // ── 사전 지식 (선지식 AI / 도감 100%) ────────────────────────
+  let carry = opts.carryKnown ? [...opts.carryKnown] : [];
+  if (opts.fullCodex) {
+    const keys = new Set<string>();
+    const unlockedN = Math.min(R.regionsStart + grade, D.regions.length);
+    for (const rg of D.regions.slice(0, unlockedN))
+      for (const r of reachableRecipes(D, rg)) keys.add(pairKey(r.inputs[0], r.inputs[1]));
+    carry = [...keys];
+  } else if (policy === 'preknown' && !carry.length) {
     // 시장에서 바로 구할 수 있는(풀 내 tier A) 재료 2장짜리 고가 레시피 5개 — "아는 장사" 모델
+    const reach = reachableRecipes(D, region);
     const direct = reach.filter((r) => r.inputs.every((id) => region.card_pool.includes(id)));
     const byValue = direct.sort((a, b) =>
       (R.basePrice[D.cardById.get(b.result)!.tier] ?? 0) - (R.basePrice[D.cardById.get(a.result)!.tier] ?? 0));
-    for (const r of byValue.slice(0, 5)) known.add(pairKey(r.inputs[0], r.inputs[1]));
-  } else if ((opts.preknownFraction ?? 0) > 0) {
-    const shuffled = [...reach].sort(() => rng() - 0.5);
-    for (const r of shuffled.slice(0, Math.round(reach.length * (opts.preknownFraction ?? 0))))
-      known.add(pairKey(r.inputs[0], r.inputs[1]));
+    carry = byValue.slice(0, 5).map((r) => pairKey(r.inputs[0], r.inputs[1]));
   }
 
-  const initialResults = new Set<string>(
-    [...known].map((k) => D.recipeByKey.get(k)?.result).filter(Boolean) as string[],
-  );
+  const S = new EconSession(D, seed, {
+    regionIdx, carryKnown: carry, runIndex: opts.runIndex ?? 1, grade,
+    guests: opts.guests, saturationOff: opts.saturationOff,
+  });
 
-  // v2.2 — 게시판 수주: AI는 게시된 어음을 즉시 수주한다(= v2.1 자동 배정과 같은 결과).
-  // mid 수량·마감 보정은 rules.json 손잡이. 스위치가 전부 꺼져 있으면 v2.1과 동일한 계약이 나온다.
-  const contracts: RunContract[] = rollContracts(D.contracts, rng, R.midCountOffset, true, R.midDeadline);
-  // 심사(저울질) 창 카운트 기준선 — "신규 복원"은 장부에 새로 적힌 레시피 수다 (도감 단일축)
-  const initialKnown = new Set(known);
-
-  let field: string[] = rollStartingField(D, R, region, rng);
-
-  const runIndex = Math.max(1, opts.runIndex ?? 1);
-  // v2.2 — 온보딩 첫 런 한정: 2런차부터 턴 1 드래프트·시장 개방 (플로우 감사 #7)
-  const draftFrom = R.onboardingFirstRunOnly && runIndex >= 2 ? 1 : R.draftFromTurn;
-  // v2.2 — 이벤트 덱: 별도 난수 스트림. OFF면 본류 난수 순서는 v2.1과 완전히 같다.
-  const eventDeck = R.eventsOn ? new EventDeck(D, R, region, seed, runIndex) : null;
-  // v2.2 — 실패쌍 장부: 같은 실패쌍은 런 안에서 다시 긁지 않는다 (상한 절약 = 사람과 같은 이득)
-  const failedPairs = new Set<string>();
-
-  let gold = R.startingGold;
-  let marketOpen = R.onboardingFirstRunOnly && runIndex >= 2;
-  const soldOnce = new Set<string>(); // 첫 판매 프리미엄 소진 여부 (결과물 id)
-  const tierSold: TierMap = { A: 0, B: 0, C: 0 };
-  const soldKinds = new Set<string>();
-  const revenueByCard = new Map<string, number>();
-  let combosTotal = 0, combosLast3 = 0, giveUps = 0, firstSaleTurn = 0, firstCTurn = 0;
-  const goldCurve: Array<{ turn: number; gold: number; combos: number }> = [];
-
-  const pctx: PriceContext = {
-    codex, initialResults, soldOnce, tierSold, saturationOff: opts.saturationOff,
-    eventMultOf: eventDeck ? (c) => eventDeck.multOf(turn, c) : undefined,
-  };
-  const price = (card: { id: string; tier: string }) => priceOf(D, R, pctx, D.cardById.get(card.id)!);
-
-  const removeAt = (idx: number) => field.splice(idx, 1)[0];
-
-  const tryCombine = (i: number, j: number): boolean => {
-    const key = pairKey(field[i], field[j]);
-    const r = D.recipeByKey.get(key);
-    if (!r) return false;
-    const res = D.cardById.get(r.result)!;
-    const freed = D.cardById.get(field[i])!.slot_cost + D.cardById.get(field[j])!.slot_cost;
-    if (slotUsed(D, field) - freed + res.slot_cost > R.fieldSlots) return false;
-    field = field.filter((_, k) => k !== i && k !== j);
-    field.push(r.result);
-    known.add(key);
-    combosTotal++;
-    if (!codex.has(r.result)) {
-      codex.add(r.result);
-      if (res.tier === 'C' && !firstCTurn) firstCTurn = turn;
-      emit({ t: 'discover', card: r.result, tier: res.tier, turn });
-    }
-    return true;
+  const aff = buildAffinity(D);
+  const affMemo = new Map<string, number>();
+  const affOf = (a: string, b: string): number => {
+    const k = pairKey(a, b);
+    let v = affMemo.get(k);
+    if (v === undefined) { v = affinityScore(D, aff, a, b); affMemo.set(k, v); }
+    return v;
   };
 
-  let turn = 0;
-  for (turn = 1; turn <= R.runTurns; turn++) {
-    eventDeck?.beginTurn(turn);
-    // 1) 공급 (턴 1~3 push / 이후 드래프트 1장. 2런차부터는 턴 1 드래프트 — v2.2 스위치)
-    const candidates = rollSupply(R, region, rng);
-    const accept = (id: string): boolean => {
-      if (slotUsed(D, field) + D.cardById.get(id)!.slot_cost <= R.fieldSlots) { field.push(id); return true; }
-      return false;
-    };
-    if (turn < draftFrom) {
-      for (const id of candidates) if (!accept(id)) emit({ t: 'supply_skipped' });
-    } else {
-      // 드래프트: 정책별 선택. 나머지는 소멸 (= 매 턴 2장 포기 — 배타성)
-      let pickId: string = candidates[0];
-      if (policy === 'greedy') pickId = candidates[0];
-      else {
-        // 계열 친화: 필드와 궁합 점수가 가장 높은 후보 / 선지식은 아는 레시피 재료 우선
-        let best = -1;
-        for (const id of candidates) {
-          let s = 0;
-          for (const key of known) if (key.split('+').includes(id)) s += 10; // 아는 레시피의 재료면 가산
-          for (const f of field) {
-            const k = pairKey(id, f);
-            if (known.has(k) && D.recipeByKey.has(k)) s += 100;
-            else if (policy !== 'preknown') s += affinityScore(D, aff, id, f);
-          }
-          if (s > best) { best = s; pickId = id; }
-        }
+  const stats: Stats = { giveUps: 0 };
+  let movedThisTurn = false;
+
+  /* ── 정책 조각들 ─────────────────────────────────────────── */
+
+  const chooseDraft = (cands: string[]): number => {
+    if (policy === 'greedy') return 0;
+    let best = -1, pick = 0;
+    const inField = allCards(S.piles);
+    for (let i = 0; i < cands.length; i++) {
+      const id = cands[i];
+      let s = 0;
+      for (const key of S.known) if (key.split('+').includes(id)) s += 10; // 아는 레시피의 재료면 가산
+      for (const f of inField) {
+        const k = pairKey(id, f);
+        if (S.known.has(k) && S.recipeOf(k)) s += 100;
+        else if (policy !== 'preknown') s += affOf(id, f);
       }
-      if (!accept(pickId)) { giveUps++; emit({ t: 'supply_skipped' }); }
+      if (s > best) { best = s; pick = i; }
     }
+    return pick;
+  };
 
-    // 2) 아는 레시피 실행 (무제한) — 가치 있는 결과 위주
+  /** 수주 선택 — mid는 즉시, late는 첫 턴에 적성 좋은 것 하나(재게시 문법), 2턴부터 전부. */
+  const lateFit = (c: RunContract): number => {
+    if (c.kind === 'specific') return 4;
+    if (c.kind === 'distinct_tier') return 3;
+    if (c.kind === 'tier_count') return 2;
+    return 1; // gold — 수동적이라 마지막
+  };
+  const doClaims = (): void => {
+    if (!S.R.contractBoardOn) return;
+    const posted = (): RunContract[] =>
+      S.contracts.filter((c) => !c.claimed && !c.done && !c.failed && S.turn <= c.deadline);
+    if (policy !== 'reasoner' || S.turn >= 2) {
+      for (const c of posted()) S.claim(c.id);
+      return;
+    }
+    // reasoner 1턴: mid 먼저, late는 최고 적성 1건만 — 남은 자리는 재게시를 본다
+    const mid = posted().find((c) => c.slot === 'mid');
+    if (mid) S.claim(mid.id);
+    const lates = posted().filter((c) => c.slot === 'late').sort((a, b) => lateFit(b) - lateFit(a));
+    if (lates.length) S.claim(lates[0].id);
+  };
+
+  /** 아는 레시피 실행 (무제한) — 필요하면 파낸다. 스캔 봇은 뒷면을 기억하지 못한다. */
+  const doKnownCombos = (): void => {
     let did = true;
-    while (did) {
+    let guard = 0;
+    while (did && guard++ < 80) {
       did = false;
-      for (const [i, j] of pairsOf(field)) {
-        const key = pairKey(field[i], field[j]);
-        if (known.has(key) && D.recipeByKey.has(key)) {
-          const res = D.cardById.get(D.recipeByKey.get(key)!.result)!;
-          // A 재료를 A로 바꾸는 조합은 필드에 여유 있을 때만 (재료 낭비 방지 휴리스틱)
-          if (res.tier === 'A' && slotUsed(D, field) < R.fieldSlots - 2 && rng() < 0.5) continue;
-          if (tryCombine(i, j)) { did = true; break; }
+      const ids = [...new Set(policy === 'greedy' ? S.spread : allCards(S.piles))];
+      outer:
+      for (let x = 0; x < ids.length; x++) {
+        for (let y = x + 1; y < ids.length; y++) {
+          const key = pairKey(ids[x], ids[y]);
+          if (!S.known.has(key)) continue;
+          const r = S.recipeOf(key);
+          if (!r) continue;
+          const res = S.card(r.result);
+          // A 재료를 A로 바꾸는 조합은 절반만 (재료 낭비 방지 휴리스틱 — v2 계승)
+          if (res.tier === 'A' && prng() < 0.5) continue;
+          const pos = bringTogether(S, ids[x], ids[y]);
+          if (!pos) continue;
+          if (S.combine(pos[0], pos[1]).ok) { did = true; break outer; }
         }
       }
     }
+  };
 
-    // 3) 미발견 시도 (상한 = 공급 × 2) — greedy: 무작위 / reasoner: 계열 친화 순
-    if (policy !== 'preknown') {
-      const cap = R.supply * R.unknownAttemptFactor;
-      let attempts = 0;
-      const tried = new Set<string>();
-      // v2.2 실패쌍 장부: 이미 실패로 적힌 쌍은 후보에서 뺀다 (재시도 무의미 — 상한 절약).
-      // 스위치 OFF면 failedPairs가 항상 비어 있어 v2.1과 같은 후보·같은 난수 소비다.
-      const notLedgered = ([i, j]: [number, number]): boolean =>
-        !failedPairs.has(pairKey(field[i], field[j]));
-      while (attempts < cap) {
-        const cand = pairsOf(field)
-          .filter(([i, j]) => !known.has(pairKey(field[i], field[j])) && !tried.has(pairKey(field[i], field[j])))
-          .filter(notLedgered);
-        if (!cand.length) break;
-        let pick: [number, number];
+  /** 미발견 시도 (상한 = 턴당 6회 고정) — greedy: 무작위 / reasoner: 계열 친화 + 실패 학습 + 인물 우선. */
+  let nearMisses = 0;
+  // 실패도 정보다: cold 신호가 가리킨 계열쌍은 뒤로, warm 계열쌍은 앞으로 (추론 AI의 학습)
+  const coldFamilies = new Set<string>();
+  const warmFamilies = new Set<string>();
+  const doUnknownAttempts = (): void => {
+    if (policy === 'preknown') return;
+    let cands: Array<[string, string]> = [];
+    let regen = true;
+    let guard = 0;
+    while (S.unknownLeft > 0 && guard++ < 200) {
+      if (regen) {
+        cands = [];
+        const seen = new Set<string>();
+        // 적재 접근 — 뒷면 정보 제약 (07 지시서): 전수 스캔 봇은 자기가 묻은 카드를
+        // 기억하지 못한다. 눈에 보이는 펼친 카드만 긁는다. 추론 AI는 자기가 쌓은 것을
+        // 기억하는 플레이어 모델이라 전 카드가 후보다 — 후보가 넓어질수록 단서로 줄인다.
+        const uids = [...new Set(policy === 'greedy' ? S.spread : allCards(S.piles))];
+        for (let x = 0; x < uids.length; x++) {
+          for (let y = x + 1; y < uids.length; y++) {
+            const key = pairKey(uids[x], uids[y]);
+            if (S.known.has(key) || S.failedPairs.has(key) || S.triedKeys.has(key) || seen.has(key)) continue;
+            seen.add(key);
+            cands.push([uids[x], uids[y]]);
+          }
+        }
         if (policy === 'reasoner') {
-          cand.sort(([a1, b1], [a2, b2]) =>
-            affinityScore(D, aff, field[a2], field[b2]) - affinityScore(D, aff, field[a1], field[b1]));
-          pick = cand[0];
-        } else pick = cand[Math.floor(rng() * cand.length)];
-        const key = pairKey(field[pick[0]], field[pick[1]]);
-        tried.add(key);
-        attempts++;
-        if (!tryCombine(pick[0], pick[1])) {
-          if (R.failLedgerOn) failedPairs.add(key);
-          emit({ t: 'near_miss' });
+          const score = (p: [string, string]): number => {
+            // 인물+물건 우선 — 맞는 물건을 쥐여주면 직업이 깨어난다 (식객 활용)
+            const persons = (S.isPersonLike(p[0]) ? 1 : 0) + (S.isPersonLike(p[1]) ? 1 : 0);
+            if (persons === 1) {
+              const item = S.isPersonLike(p[0]) ? p[1] : p[0];
+              if (S.card(item).tier === 'B') return 1000;
+            }
+            if (persons > 0) return -1000; // 인물끼리는 섞지 않는다
+            let s = affOf(p[0], p[1]);
+            // 산 단서를 실제로 쓴다: "X는 'tag' 계열과 반응이 좋다" → 그 쌍을 최우선으로
+            for (const h of S.hints) {
+              if ((h.cardId === p[0] && S.card(p[1]).tags.includes(h.tag)) ||
+                  (h.cardId === p[1] && S.card(p[0]).tags.includes(h.tag))) s += 400;
+            }
+            // 실패 학습 — 이 쌍의 계열 조합이 cold로 판명난 계열이면 뒤로, warm이면 앞으로
+            for (const ta of S.card(p[0]).tags) for (const tb of S.card(p[1]).tags) {
+              const fam = [ta, tb].sort().join('|');
+              if (coldFamilies.has(fam)) s -= 60;
+              if (warmFamilies.has(fam)) s += 40;
+            }
+            return s;
+          };
+          cands.sort((p, q) => score(q) - score(p));
         }
+        regen = false;
       }
-      if (attempts >= cap) {
-        const remaining = pairsOf(field)
-          .filter(([i, j]) => !known.has(pairKey(field[i], field[j])) && !tried.has(pairKey(field[i], field[j])))
-          .filter(notLedgered);
-        if (remaining.length) giveUps++; // 더 긁고 싶었는데 상한
-      }
+      if (!cands.length) break;
+      const pick = policy === 'reasoner'
+        ? cands.shift()!
+        : cands.splice(Math.floor(prng() * cands.length), 1)[0];
+      const pos = bringTogether(S, pick[0], pick[1]);
+      if (!pos) continue;
+      const out = S.combine(pos[0], pos[1]);
+      if (out.ok) regen = true; // 필드가 바뀌었다 — 후보 재생성
+      else if (out.reason === 'no_recipe') {
+        nearMisses++;
+        // 실패가 판 정보를 적립한다 (실패=정보 2규칙의 AI 쪽 소비자)
+        if (out.hint) {
+          const fam = [out.hint.ta, out.hint.tb].sort().join('|');
+          if (out.signal === 'cold') coldFamilies.add(fam);
+          else warmFamilies.add(fam);
+        }
+      } else if (out.reason === 'cap') break;
     }
+    if (S.unknownLeft <= 0 && cands.length) stats.giveUps++; // 더 긁고 싶었는데 상한
+  };
 
-    // 3.5) 첫 판매: 구매자가 찾아온다 — 첫 발견물(B 이상)이 생기면 계약보다 먼저 성사 (온보딩 규칙)
-    if (!marketOpen) {
-      const firstIdx = field.findIndex((id) => D.cardById.get(id)!.tier !== 'A' && codex.has(id));
-      if (firstIdx >= 0) {
-        const card = D.cardById.get(field[firstIdx])!;
-        const p = price(card);
-        removeAt(firstIdx);
-        gold += p;
-        soldOnce.add(card.id);
-        soldKinds.add(card.id);
-        tierSold[card.tier] = (tierSold[card.tier] ?? 0) + 1;
-        revenueByCard.set(card.id, (revenueByCard.get(card.id) ?? 0) + p);
-        marketOpen = true;
-        firstSaleTurn = turn;
-        emit({ t: 'sell', card: card.id, gold: p, turn });
+  /** 납품 — 스프레드에 없으면 파내서 준다. */
+  const doDeliveries = (): void => {
+    if (S.traveling) return;
+    for (const c of S.contracts) {
+      if (!c.claimed || c.done || c.failed || S.turn > c.deadline || c.kind === 'gold') continue;
+      let guard = 0;
+      while (guard++ < 20 && !c.done) {
+        if (S.deliverableIndex(c) >= 0) { if (!S.deliver(c.id)) break; continue; }
+        const target = allCards(S.piles).find((id) => matchesContract(S, c, id));
+        if (!target) break;
+        const pos = locate(S, target);
+        if (!pos) break;
+        makeTop(S, pos[0], pos[1]);
+        if (S.deliverableIndex(c) < 0) break;
+        if (!S.deliver(c.id)) break;
       }
     }
+  };
 
-    // 4) 계약 납품 (무료 행동)
-    for (const c of contracts) {
-      if (c.done || c.failed || turn > c.deadline) continue;
-      if (c.kind === 'gold') {
-        if (gold >= (c.amount ?? 0)) { c.done = true; gold += c.reward; emit({ t: 'contract_done', id: c.id, turn }); }
-        continue;
-      }
-      const idx = contractTargetIndex(D, c, field, codex, initialResults);
-      // reasoner는 계약을 우선하고, greedy는 팔 물건이 남을 때만 납품
-      if (idx >= 0 && (policy !== 'greedy' || field.filter((id) => D.cardById.get(id)!.tier !== 'A').length > 1)) {
-        c.kindsDone.add(field[idx]);
-        removeAt(idx);
-        c.delivered++;
-        if (c.delivered >= (c.count ?? 1)) { c.done = true; gold += c.reward; emit({ t: 'contract_done', id: c.id, turn }); }
-      }
+  /** 이동 — 추론 AI만. 이 지역의 발견거리가 마르면 다른 지역으로 (계약 역산). */
+  const maybeMove = (): void => {
+    if (policy !== 'reasoner' || S.traveling || movedThisTurn) return;
+    if (S.turn < 5 || S.turn > S.R.runTurns - 4 || S.marketActionUsed) return;
+    const midPending = S.contracts.some(
+      (c) => c.slot === 'mid' && c.claimed && !c.done && !c.failed && S.turn <= c.deadline);
+    if (midPending) return;
+    const unknownIn = (rgIdx: number): number =>
+      reachableRecipes(D, D.regions[rgIdx])
+        .filter((r) => !S.known.has(pairKey(r.inputs[0], r.inputs[1]))).length;
+    const cur = unknownIn(S.regionIdx);
+    if (cur >= 3) return;
+    let bestIdx = -1, bestVal = cur + 2;
+    for (let i = 0; i < S.unlockedRegions; i++) {
+      if (i === S.regionIdx) continue;
+      const v = unknownIn(i);
+      if (v > bestVal) { bestVal = v; bestIdx = i; }
     }
+    if (bestIdx >= 0 && S.startMove(bestIdx)) movedThisTurn = true;
+  };
 
-    // 5) 시장 행동 (턴당 1회: 판매 or 구매)
-    const sellable = field
-      .map((id, idx) => ({ id, idx, card: D.cardById.get(id)! }))
-      .filter((x) => x.card.tier !== 'A' || slotUsed(D, field) > R.fieldSlots - 1);
-    let wantSell: { id: string; idx: number; card: { id: string; tier: string } } | null = null;
-    if (sellable.length) {
-      sellable.sort((a, b) => price(b.card) - price(a.card));
-      // 계약에 필요한 물건은 팔지 않는다 (reasoner)
-      wantSell = sellable.find((x) =>
-        policy !== 'reasoner' || !neededByContract(D, contracts, turn, x.id, codex, initialResults)) ?? null;
+  /** 파견 — 조수는 greedy 빼고 쓴다. 행선지: 밥이 급하면 텃밭, 아니면 탐사/채집터. */
+  const maybeDispatch = (): void => {
+    if (policy === 'greedy') return;
+    if (!S.canDispatch() || S.turn > S.R.runTurns - S.R.dispatchTurns - 1) return;
+    if (S.gold < S.R.dispatchWage + 8) return; // 임금 내고도 살림이 남아야 보낸다
+    let dest: DispatchDest = 'gather';
+    if (policy === 'reasoner') {
+      const guests = S.spreadGuests().length;
+      if (guests > 0 && S.foodCount() < guests + 1) dest = 'garden';
+      else if (S.unlockedRegions > 1) dest = prng() < 0.5 ? 'explore' : 'gather';
     }
-    // reasoner 구매 욕구: 아는 고가 레시피의 빠진 재료 (지역 시장 = 풀의 A 카드)
+    S.dispatch(dest);
+  };
+
+  /** 시장 (턴당 1회) — 판매 vs 구매 vs 단서 택1. 계약 필요품·식객 밥은 지킨다. */
+  const doMarket = (): void => {
+    if (!S.canMarket()) return;
+    const guests = S.spreadGuests().length;
+    const foodN = S.foodCount();
+    const uniqueIds = [...new Set(allCards(S.piles))];
+    const sellable = uniqueIds.filter((id) => {
+      const c = S.card(id);
+      if (S.isPersonLike(id) || c.tier === 'A') return false;
+      if (policy === 'reasoner' && S.neededForContract(id)) return false; // 계약에 필요한 물건은 팔지 않는다
+      if (policy === 'reasoner' && guests > 0 && c.tags.includes('food') && foodN <= guests) return false;
+      return true;
+    });
+    sellable.sort((a, b) => S.priceOfCard(b) - S.priceOfCard(a));
+    const wantSell = sellable[0] ?? null;
+
+    // 구매 욕구: 아는 고가 레시피의 빠진 재료 (지역 시장 = 풀의 A 카드)
     let wantBuy: string | null = null;
-    if (policy !== 'greedy' && gold >= (R.basePrice.A * R.buyMarkup)) {
-      outer: for (const r of reach) {
-        if (!known.has(pairKey(r.inputs[0], r.inputs[1]))) continue;
-        const resTier = D.cardById.get(r.result)!.tier;
-        if (resTier === 'A') continue;
-        const have0 = field.includes(r.inputs[0]), have1 = field.includes(r.inputs[1]);
+    if (policy !== 'greedy' && S.gold >= S.buyCost()) {
+      const inField = new Set(allCards(S.piles));
+      outer: for (const r of reachableRecipes(D, S.region)) {
+        if (!S.known.has(pairKey(r.inputs[0], r.inputs[1]))) continue;
+        if (D.cardById.get(r.result)!.tier === 'A') continue;
+        const have0 = inField.has(r.inputs[0]), have1 = inField.has(r.inputs[1]);
         if (have0 !== have1) {
           const need = have0 ? r.inputs[1] : r.inputs[0];
-          if (region.card_pool.includes(need) && D.cardById.get(need)!.tier === 'A') { wantBuy = need; break outer; }
-        }
-      }
-    }
-    if (marketOpen) {
-      if (wantSell && wantBuy) giveUps++; // 택1 — 여기가 배타성이다
-      if (wantSell && (!wantBuy || price(wantSell.card) >= R.basePrice.A * 2)) {
-        const p = price(wantSell.card);
-        const sold = wantSell;
-        field = field.filter((_, k) => k !== sold.idx);
-        gold += p;
-        soldOnce.add(sold.id);
-        soldKinds.add(sold.id);
-        tierSold[sold.card.tier] = (tierSold[sold.card.tier] ?? 0) + 1;
-        revenueByCard.set(sold.id, (revenueByCard.get(sold.id) ?? 0) + p);
-        if (!firstSaleTurn) firstSaleTurn = turn; // 2런차 시장 개방 시 구매자 방문 없이 첫 판매가 여기서 난다
-        emit({ t: 'sell', card: sold.id, gold: p, turn });
-      } else if (wantBuy) {
-        const cost = Math.round(R.basePrice.A * R.buyMarkup);
-        if (gold >= cost && slotUsed(D, field) + D.cardById.get(wantBuy)!.slot_cost <= R.fieldSlots) {
-          gold -= cost;
-          field.push(wantBuy);
-          emit({ t: 'buy', card: wantBuy, gold: -cost, turn });
+          if (S.region.card_pool.includes(need) && D.cardById.get(need)!.tier === 'A') {
+            wantBuy = need;
+            break outer;
+          }
         }
       }
     }
 
-    // 6) 버리기 1장 — 조합 상대 없는 A 카드 (선지식 AI는 '아는 레시피' 기준으로 죽은 카드 판정)
-    if (R.discardPerTurn > 0 && slotUsed(D, field) >= R.fieldSlots - 1) {
-      const hasPair = (i: number) => pairsOf(field).some(([a, b]) => {
-        if (a !== i && b !== i) return false;
-        const k = pairKey(field[a], field[b]);
-        return policy === 'preknown' ? known.has(k) : D.recipeByKey.has(k);
-      });
-      const deadIdx = field.findIndex((id, i) => D.cardById.get(id)!.tier === 'A' && !hasPair(i));
-      if (deadIdx >= 0) { removeAt(deadIdx); emit({ t: 'discard' }); }
+    if (wantSell && wantBuy) stats.giveUps++; // 택1 — 여기가 배타성이다
+    if (wantSell && (!wantBuy || S.priceOfCard(wantSell) >= S.R.basePrice.A * 2)) {
+      const pos = locate(S, wantSell);
+      if (!pos) return;
+      makeTop(S, pos[0], pos[1]);
+      const pi = locate(S, wantSell)![0];
+      S.sell(pi);
+    } else if (wantBuy) {
+      S.buy(wantBuy);
+    } else if (policy === 'reasoner' && S.gold >= S.hintCost() + 10) {
+      // 팔 것도 살 것도 없는 턴 — 정보에 투자한다 (정보 경제: 위키 대신 게임 안 단서)
+      S.buyHint();
     }
+  };
 
-    if (turn === R.runTurns - 3) combosLast3 = combosTotal; // 기준점 저장 (정산 때 차감)
-    goldCurve.push({ turn, gold, combos: combosTotal });
-    emit({ t: 'turn_end', turn, occupancy: slotUsed(D, field) / R.fieldSlots, gold });
+  /* ── 턴 루프 ─────────────────────────────────────────────── */
 
-    for (const c of contracts) if (!c.done && turn >= c.deadline) c.failed = true;
+  let guard = 0;
+  while (S.phase !== 'over' && guard++ < 3000) {
+    if (S.pendingVisitor) {
+      // 식객 활용: reasoner·greedy는 들이고, 선지식(회전 봇)은 돌려보낸다
+      if (policy === 'preknown') S.declineVisitor();
+      else if (!S.acceptVisitor()) S.declineVisitor();
+      continue;
+    }
+    if (S.phase === 'draft') {
+      const cands = S.draftCandidates!;
+      if (!S.takeDraft(chooseDraft(cands))) S.takeDraft(-1);
+      stats.giveUps++; // 드래프트는 매번 나머지를 포기하는 문법이다
+      continue;
+    }
+    movedThisTurn = false;
+    doClaims();
+    doKnownCombos();
+    doUnknownAttempts();
+    if (S.firstBuyer) S.takeFirstBuyer();
+    doDeliveries();
+    maybeMove();
+    doMarket();
+    maybeDispatch();
+    S.endTurn();
   }
 
-  // ── 정산 ──────────────────────────────────────────────────────
-  const s = settleRun(R, contracts, gold);
+  /* ── 요약 ────────────────────────────────────────────────── */
+
+  const events = S.events;
+  let firstSaleTurn = 0, firstCTurn = 0;
+  const revenueByCard = new Map<string, number>();
+  const soldKinds = new Set<string>();
+  const goldCurve: Array<{ turn: number; gold: number; combos: number }> = [];
+  const occs: number[] = [];
+  for (const e of events) {
+    if (e.t === 'sell') {
+      if (!firstSaleTurn) firstSaleTurn = e.turn;
+      soldKinds.add(e.card);
+      revenueByCard.set(e.card, (revenueByCard.get(e.card) ?? 0) + e.gold);
+    } else if (e.t === 'combine_ok') {
+      if (!firstCTurn && e.first_time && S.card(e.result)?.tier === 'C') firstCTurn = e.turn;
+    } else if (e.t === 'turn_end') {
+      occs.push(e.occupancy);
+      goldCurve.push({ turn: e.turn, gold: e.gold, combos: e.combos });
+    }
+  }
+  const s = S.settlement!;
   const topRevenue = Math.max(0, ...revenueByCard.values());
   const totalRevenue = [...revenueByCard.values()].reduce((acc, x) => acc + x, 0);
-  // 심사(저울질) 창 누적용 — 이번 런에 장부에 새로 적힌 레시피 수 (이월분 제외)
-  let newDiscov = 0, newDiscovC = 0;
-  for (const k of known) {
-    if (initialKnown.has(k)) continue;
-    newDiscov++;
-    if (D.cardById.get(D.recipeByKey.get(k)?.result ?? '')?.tier === 'C') newDiscovC++;
-  }
-  // 계약별 이행 (첫 계약 90%+ 검증용)
-  const midDone = contracts.filter((c) => c.slot === 'mid' && c.done).length;
-  const midTotal = contracts.filter((c) => c.slot === 'mid').length;
-  emit({
-    t: 'run_end', turn: R.runTurns, gold, settle: s.settle, runFail: s.runFail,
-    fulfilled: s.fulfilled, contractsTotal: s.contractsTotal,
-    discovered: [...codex], combos: combosTotal, giveUps, firstSaleTurn, firstCTurn,
+  const nd = S.newDiscoveries();
+  const midDone = S.contracts.filter((c) => c.slot === 'mid' && c.done).length;
+  const midTotal = S.contracts.filter((c) => c.slot === 'mid').length;
+  const last3Base = goldCurve[goldCurve.length - 4]?.combos ?? 0;
+
+  return {
+    runFail: s.runFail, fulfilled: s.fulfilled, contractsTotal: s.contractsTotal,
+    gold: S.gold, settle: s.settle,
+    discovered: S.codex.size, discoveredIds: [...S.codex],
+    combos: S.combosTotal, turns: S.R.runTurns,
+    occAvg: occs.reduce((a, x) => a + x, 0) / (occs.length || 1),
+    giveUps: stats.giveUps,
+    firstSaleTurn, firstCTurn,
     topShare: totalRevenue ? topRevenue / totalRevenue : 0,
-    earlyGoldRate: (goldCurve[6]?.gold ?? gold) / 7,
-    lateGoldRate: (gold - (goldCurve[goldCurve.length - 8]?.gold ?? 0)) / 7,
-    combosLast3: combosTotal - combosLast3, soldKinds: soldKinds.size, knownKeys: [...known],
-    newDiscov, newDiscovC, midDone, midTotal,
-  });
+    earlyGoldRate: (goldCurve[6]?.gold ?? S.gold) / 7,
+    lateGoldRate: (S.gold - (goldCurve[goldCurve.length - 8]?.gold ?? 0)) / 7,
+    combosLast3: S.combosTotal - last3Base,
+    soldKinds: soldKinds.size,
+    knownKeys: S.carryKeys(),
+    newDiscov: nd.total, newDiscovC: nd.tierC,
+    midDone, midTotal,
+    maxChain: S.maxChain,
+    guestsJoined: S.guestsJoined, guestTurns: S.guestTurns,
+    feeds: S.feedsCount, strikes: S.strikesCount,
+    moves: S.movesCount, dispatches: S.dispatchCount, digs: S.digsCount,
+    nearMisses,
+  };
 }

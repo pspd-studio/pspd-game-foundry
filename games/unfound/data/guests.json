@@ -1,8 +1,11 @@
 {
-  "_comment": "v2.2 식객 맛보기 (SSOT 슬라이스 구성 원칙 — 빌드 계층의 씨앗, 효과는 코드 하드코딩 허용). 인물 카드는 공급 풀에 절대 넣지 않는다 — '떠도는 인물이 가게 앞에 온다' 방문 이벤트로만 지급(시드 보정, 런당 1~2회, 플로우 감사 #3 풀 희석 방지). 식객은 인물+물건 고유 레시피 2개로만 획득, 필드 1칸 점유, 펼쳐진 동안만 발동, 런 리셋(이월 금지). 도감 등재 대상. 이 파일은 recipes.json/cards.json에 합치지 않는다 — 합치면 계열 친화도(buildAffinity)가 변해 G2 재현이 깨진다. 세션이 자기만의 오버레이로 읽는다.",
+  "_comment": "v3.0 식객 5종 (SSOT [v3.0] 식객 절, 07 지시서 Phase 1-8). 인물 카드는 공급 풀에 절대 넣지 않는다 — 방문 이벤트(시드 보정, 런당 1~2회) + 시장 소개(구매) + 파견 보따리(저확률)로만 지급(플로우 감사 #3 풀 희석 방지). 식객은 인물+물건 고유 레시피로만 획득, 펼침 자리 1칸 점유, 펼쳐진 동안만 발동, 런 리셋(이월 금지). 밥값: 중간·최종 마감 턴에 식객당 '먹을 것'(food 태그) 카드 1장 소모, 없으면 파업(효과 정지, 재급식 재개). 효과는 5종 이내 하드코딩 허용(07 지시서 불변 조건). 이 파일은 recipes.json/cards.json에 합치지 않는다 — 세션이 자기만의 오버레이로 읽는다.",
   "persons": [
     { "id": "p_appraiser", "name_ko": "낯선 감정인", "tier": "P", "tags": ["person"], "slot_cost": 1 },
-    { "id": "p_watchman",  "name_ko": "등불 든 사내", "tier": "P", "tags": ["person"], "slot_cost": 1 }
+    { "id": "p_watchman",  "name_ko": "등불 든 사내", "tier": "P", "tags": ["person"], "slot_cost": 1 },
+    { "id": "p_porter",    "name_ko": "지친 장정",   "tier": "P", "tags": ["person"], "slot_cost": 1 },
+    { "id": "p_gossip",    "name_ko": "수다스런 행상", "tier": "P", "tags": ["person"], "slot_cost": 1 },
+    { "id": "p_thief",     "name_ko": "그늘에 선 아이", "tier": "P", "tags": ["person"], "slot_cost": 1 }
   ],
   "guests": [
     {
@@ -14,6 +17,21 @@
       "id": "g_watchman", "name_ko": "야경꾼", "tier": "G", "tags": ["person"], "slot_cost": 1,
       "effect": "fail_detail",
       "effect_ko": "실패 근접 신호가 한 단계 상세해진다"
+    },
+    {
+      "id": "g_porter", "name_ko": "짐꾼", "tier": "G", "tags": ["person"], "slot_cost": 1,
+      "effect": "draft_plus",
+      "effect_ko": "무주물 경매 후보가 1장 늘어난다"
+    },
+    {
+      "id": "g_gossip", "name_ko": "소문쟁이", "tier": "G", "tags": ["person"], "slot_cost": 1,
+      "effect": "demand_delay",
+      "effect_ko": "분실물 게시판의 소등이 1칸 늦춰진다"
+    },
+    {
+      "id": "g_thief", "name_ko": "도둑", "tier": "G", "tags": ["person"], "slot_cost": 1,
+      "effect": "gold_trickle",
+      "effect_ko": "매 턴 어디선가 잔돈을 가져온다"
     }
   ],
   "recipes": [
@@ -26,6 +44,21 @@
       "id": "gr_watchman", "inputs": ["p_watchman", "torch"], "result": "g_watchman",
       "conditions": [],
       "discovery_text": "횃불을 쥐여주자 밤이 그의 근무지가 되었다."
+    },
+    {
+      "id": "gr_porter", "inputs": ["p_porter", "map"], "result": "g_porter",
+      "conditions": [],
+      "discovery_text": "지도를 쥐여주자 경매길이 그의 길이 되었다."
+    },
+    {
+      "id": "gr_gossip", "inputs": ["p_gossip", "bell"], "result": "g_gossip",
+      "conditions": [],
+      "discovery_text": "종을 쥐여주자 온 거리가 그 소리를 궁금해했다."
+    },
+    {
+      "id": "gr_thief", "inputs": ["p_thief", "shadow"], "result": "g_thief",
+      "conditions": [],
+      "discovery_text": "그림자를 쥐여주자 아이가 그 속으로 사라졌다."
     }
   ]
 }

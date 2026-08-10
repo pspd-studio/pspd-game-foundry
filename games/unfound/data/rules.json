@@ -73,6 +73,16 @@
       "date": "2026-08-10",
       "change": "난이도 튜닝(07 지시서 작업 7 — rules.json만, 구조 변경 없음): v22_mid_count_offset=-1(mid 계약 요구 수량 1 하향, 최소 1 — 계약 요구치 소폭 하향), v22_mid_deadline=10(중간 마감 8→10턴 재배치 — SSOT v2.2 계약 절 '중간 마감 10턴' 원문 반영). 결과: v2.2 ON 추론 AI 런 실패율 50.4% → 45.4%(밴드 30~50% 복귀), 계약 데이터 원본(contracts.json)은 손대지 않아 스위치 OFF면 G2 재현이 그대로 성립한다. 첫 계약 90%+ 판정은 SSOT 원문('첫 시험은 거의 통과하게')대로 1회기 신규 플레이어의 mid 어음 기준으로 시뮬에서 측정한다.",
       "by": "agent(patch) — 시뮬 스윕"
+    },
+    {
+      "date": "2026-08-10",
+      "change": "v3.0 키 신설(v3_*, 07 지시서 전면 개정판 — 7칸 폐기, 곧장 v3.0). 필드: v3_spread_slots=12 펼침 자리(시뮬 스윕 9~15, 폰 화면은 9칸 표시) + 솔리테어 적재(더미 깊이 무한, 파내기 무료·즉시, 묻힌 카드는 계열 태그만 노출). 미발견 시도 상한: v3_unknown_attempts=6 고정(구 공급×2 해석 대체 — 값은 같다). 이동: v3_regions_start=2(견습은 숲·폐허, 승급마다 +1 — '승급 보상=공간'을 지역 출입권으로 최소 구현), v3_move_turns=1(스윕 1~2, 이동 중 조합 가능·시장 불가). 파견: v3_dispatch_wage=6(B급 반 판 값), v3_dispatch_turns=3, v3_dispatch_bundle=3(보따리=재료만), v3_dispatch_person_chance=0.15(탐사 보따리에 인물 저확률). 식객: v3_person_price=15(시장 소개비), v3_thief_gold=2(도둑 매턴), v3_porter_extra=1(짐꾼 경매 후보+1), v3_rumor_delay=1(소문쟁이 소등 지연 유닛). 구 7칸 수치(35.1/31.1/45.7)는 재현 대상에서 제외 — 규칙이 바뀌었으므로 G2 재측정으로 대체(07 지시서 불변 조건).",
+      "by": "PSPD(지시서) + agent(v3.0 빌드)"
+    },
+    {
+      "date": "2026-08-10",
+      "change": "v3.0 G2 재측정 스윕 (시도 2에서 킬 라인 3/3 통과, 시드 42·7 교차 — 07 지시서 '파라미터 보정은 rules.json 스윕만'). 무한 적재+파견 물량으로 생산력이 커져 계약이 무력화(추론 실패율 2.5%)됐다. 보정: v22_mid_count_offset -1→0(구 7칸용 하향 철회), v3_late_count_offset=1 신설(late 어음 요구 수량 +1 — d5→6종/c2→3개/spec2→3개), v3_dispatch_wage 6→8·v3_dispatch_bundle 3→2(파견 물량 인플레 축소), v22_review_first_count 8→10(첫 심사 통과율 96%로 상회 — SSOT 허용 스윕 8→9~10종). 결과(500판×시드 2종): 추론 실패율 35.4%/35.2% · 선지식 계약 27.5%/26.7% · 단서 우위 36.6%/35.1%. AI 정책도 재작성(econAuto — 세션 코어 직접 운전): 전수 스캔 봇은 뒷면(묻은 카드)을 기억하지 못하고, 추론 AI는 단서 구매·실패 신호(warm/cold 계열)를 실제로 학습한다.",
+      "by": "agent(v3.0 빌드) — 시뮬 스윕"
     }
   ],
   "undecided": [
@@ -125,13 +135,26 @@
   "v22_review": 1,
   "v22_review_first_after_runs": 2,
   "v22_review_every_runs": 3,
-  "v22_review_first_count": 8,
+  "v22_review_first_count": 10,
   "v22_review_count": 12,
   "v22_review_retry_after_runs": 2,
   "v22_review_tier_c_req": [1, 2, 3, 4],
   "v22_contract_board": 1,
   "v22_fail_ledger": 1,
   "v22_onboarding_first_run_only": 1,
-  "v22_mid_count_offset": -1,
-  "v22_mid_deadline": 10
+  "v22_mid_count_offset": 0,
+  "v22_mid_deadline": 10,
+  "v3_spread_slots": 12,
+  "v3_unknown_attempts": 6,
+  "v3_regions_start": 2,
+  "v3_move_turns": 1,
+  "v3_dispatch_wage": 8,
+  "v3_dispatch_turns": 3,
+  "v3_dispatch_bundle": 2,
+  "v3_late_count_offset": 1,
+  "v3_dispatch_person_chance": 0.15,
+  "v3_person_price": 15,
+  "v3_thief_gold": 2,
+  "v3_porter_extra": 1,
+  "v3_rumor_delay": 1
 }

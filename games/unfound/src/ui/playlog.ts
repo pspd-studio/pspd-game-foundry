@@ -111,6 +111,12 @@ export function createPlayLogger(sessionId?: string) {
         ledger_blocks: sum('ledger_blocks'),
         max_chain_per_run: endEvents.map((e) => (typeof e.max_chain === 'number' ? e.max_chain : 0)),
         reviews,
+        // v3.0 (07 지시서 Phase 4 — 이동·파견·식객 밥값·파내기)
+        moves: sum('moves'),
+        dispatches: sum('dispatches'),
+        feeds: sum('feeds'),
+        strikes: sum('strikes'),
+        digs: sum('digs'),
       };
     },
   };

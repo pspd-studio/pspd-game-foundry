@@ -75,13 +75,99 @@ html, body {
 }
 .panel h2 small { letter-spacing: 0; text-transform: none; font-size: 12px; margin-left: auto; }
 
-/* ── 7칸 슬롯 그리드 ──────────────────────────────────── */
+/* ── 캔버스 매트 (펼침 4×3=12자리 — 칸 경계선이 보여야 "책상"이다) ── */
 
-.grid7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.mat {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  padding: 8px; border: 1px solid var(--rule); border-radius: 2px;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 1px, rgba(0,0,0,.02) 1px 2px),
+    #ece2cd;
+}
 .slot-empty {
   min-height: 92px; border: 1px dashed var(--rule); border-radius: 2px;
   background: repeating-linear-gradient(45deg, transparent 0 6px, rgba(0,0,0,.025) 6px 12px);
 }
+
+/* 더미 — 오프셋 테두리 + ×N 배지 (솔리테어 적재) */
+.card.hasPile { box-shadow: 3px 3px 0 #d8ccb2, 5px 5px 0 #cfc2a5; }
+.pilebadge {
+  position: absolute; right: -4px; bottom: -6px; z-index: 2;
+  font-size: 10px; padding: 1px 5px; cursor: pointer;
+  background: var(--paper-2); border: 1px solid var(--ink); border-radius: 2px;
+  color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.pilebadge i { font-style: normal; color: var(--ink-soft); margin-left: 3px; font-size: 9px; }
+.pilebadge:hover { background: #fffdf5; }
+
+/* 뒷면 목록 (파내기) — 이름은 없다, 계열 태그만 */
+.digrow { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; margin: 12px 0; }
+.facedown {
+  display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+  padding: 8px; border: 1px solid var(--ink-soft); border-radius: 2px;
+  background: repeating-linear-gradient(45deg, #ddd3bd 0 6px, #d5cab2 6px 12px);
+}
+.facedown .fdmark { font-size: 11px; color: var(--ink-soft); letter-spacing: .3em; }
+.facedown small { color: var(--ink-soft); font-size: 10px; }
+
+/* ── 지역 카드 띠 (상단 — 현재 지역 펼침, 나머지 뒷면+⏱) ── */
+.regions {
+  display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap;
+  margin: 0 20px 12px;
+}
+.region {
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+  min-width: 110px; padding: 7px 10px; font: inherit;
+  border: 1px solid var(--ink); border-radius: 2px; background: #fbf6ea; color: var(--ink);
+}
+.region small { font-size: 10px; color: var(--ink-soft); }
+.region.cur { border-width: 2px; background: #fff8e8; }
+.region .rtags { display: flex; gap: 3px; }
+.region .rtags i { font-style: normal; font-size: 9px; color: var(--ink-soft); border: 1px solid var(--rule); padding: 0 3px; }
+.region.back {
+  cursor: pointer;
+  background: repeating-linear-gradient(45deg, #e6dcc5 0 6px, #ded3b9 6px 12px);
+}
+.region.back:hover:not([disabled]) { background: #f3ecdb; }
+.region.back.going { border-color: var(--seal); color: var(--seal); }
+.region.locked { opacity: .5; border-style: dashed; }
+.travelnote { align-self: center; font-size: 12px; color: var(--seal); }
+
+/* ── 하단 확인 바 — 모든 확인이 여기로 모인다 (드래그 금지 문법) ── */
+.confirmbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
+  display: flex; gap: 12px; align-items: center; justify-content: space-between;
+  padding: 8px 20px; border-top: 1px solid var(--ink);
+  background: linear-gradient(var(--paper-2), var(--paper));
+  box-shadow: 0 -4px 14px rgba(34, 28, 20, .12);
+}
+.confirmbar .cbinfo { font-size: 12px; color: var(--ink-soft); }
+.confirmbar .cbinfo .foretell { color: var(--seal); }
+.confirmbar .cbacts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.confirmbar .cbhint { font-size: 12px; color: var(--ink-soft); }
+body { padding-bottom: 64px; } /* 확인 바가 내용을 가리지 않게 */
+
+/* ── 심사 게이지 고정 카드 (게시판 상단) ── */
+.careercard {
+  border: 1px solid var(--rule); border-left: 3px solid var(--coin);
+  background: #f8f2e4; padding: 7px 10px; margin-bottom: 8px; font-size: 13px;
+}
+.careercard small { display: block; color: var(--ink-soft); font-size: 11px; }
+.careercard .gauge { display: inline-flex; gap: 2px; margin: 3px 0; }
+.careercard .gauge i { width: 10px; height: 6px; border: 1px solid var(--rule); background: #f6efe0; }
+.careercard .gauge i.on { background: var(--coin); border-color: var(--coin); }
+
+/* ── 조수 (파견) ── */
+.assistant { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--rule); font-size: 13px; }
+.assistant .sub { display: block; color: var(--ink-soft); font-size: 11px; margin-top: 4px; }
+.assistant.out { color: var(--ink-soft); }
+.assistant.out b { color: var(--ink); }
+.destbtn {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  width: 100%; text-align: left; margin-bottom: 6px; padding: 9px 12px;
+}
+.destbtn small { color: var(--ink-soft); }
+.hintline.meal-warn { color: var(--seal); }
 
 .card {
   position: relative; min-height: 92px; text-align: left; cursor: pointer;
@@ -93,6 +179,9 @@ html, body {
 }
 .card:hover { background: #fffdf6; }
 .card.sel { outline: 2px solid var(--seal); outline-offset: 1px; background: #fff8e8; }
+/* 드래그 조합 (데스크톱 보조 입력) — 끌 수 있고, 놓을 자리가 빛난다 */
+.mat .card[draggable="true"] { cursor: grab; }
+.mat .card.dropover { outline: 2px dashed var(--coin); outline-offset: 2px; background: #fdf6dc; }
 .card[disabled] { opacity: .4; cursor: default; }
 .card.tA { border-left-color: var(--tA); }
 .card.tB { border-left-color: var(--tB); }
@@ -334,8 +423,9 @@ button.link { background: none; border: none; padding: 0; text-decoration: under
 #foot { margin: 0 20px 24px; font-size: 11px; color: var(--ink-soft); }
 
 /* ── 폰 ───────────────────────────────────────────────
-   테스터 열에 아홉은 링크를 폰에서 연다. 7열 그리드를 그대로 두면 카드가 45px로 눌려
-   이름도 태그도 안 읽힌다. 폰에서는 4열로 접고, 7칸이라는 사실은 HUD 게이지가 대신 말한다. */
+   폰(≤430px)은 매트를 3열로 접는다 (3열×4행 = 같은 12자리 — 펼침 용량은 기기와 무관해야
+   시뮬과 같은 게임이다. 지시서의 "3×3=9"는 용량 분기라 시뮬 정합을 깨서 3×4로 대체 — 스윕 대상).
+   한 화면 유지 우선: 카드가 작아지고, 하단 확인 바는 고정이다. 스크롤 선반 없음. */
 
 @media (max-width: 700px) {
   html, body { font-size: 15px; }
@@ -347,21 +437,26 @@ button.link { background: none; border: none; padding: 0; text-decoration: under
   .hud .slots .gauge { display: inline-flex; }
   .hud .end { flex: 0 0 auto; padding: 10px 14px; }
 
+  .regions { margin: 0 12px 10px; gap: 6px; }
+  .region { min-width: 90px; padding: 6px 8px; }
+
   .cols { padding: 0 12px 32px; gap: 10px; }
   .panel { padding: 10px; }
 
-  /* 작업대: 4열. 슬롯 비용은 칸 수(span)와 카드에 적힌 숫자로 계속 보인다 */
-  .grid7 { grid-template-columns: repeat(4, 1fr); gap: 5px; }
-  .grid7 .card, .slot-empty { min-height: 78px; }
+  .mat { gap: 5px; padding: 6px; }
+  .mat .card, .slot-empty { min-height: 78px; }
   .card { padding: 7px 6px 5px; }
   .cname { font-size: 14px; }
   .tags i { font-size: 8px; }
-  /* 3칸짜리 카드가 4열을 다 먹지 않도록 상한을 둔다 */
-  .grid7 .card[style*="span 3"] { grid-column: span 3; }
+  /* 3자리짜리 카드가 열을 다 먹지 않도록 상한을 둔다 */
+  .mat .card[style*="span 3"] { grid-column: span 3; }
 
-  .actions button { flex: 1 1 40%; padding: 10px 8px; }  /* 손가락 크기 */
   .panel h2 .link { padding: 8px 4px; }                  /* 도감 펼치기 — 탭 영역 확보 */
   .buyrow .buy { padding: 8px 10px; }
+
+  .confirmbar { padding: 8px 12px; flex-direction: column; align-items: stretch; gap: 6px; }
+  .confirmbar .cbacts button { flex: 1 1 auto; padding: 10px 8px; } /* 손가락 크기 */
+  body { padding-bottom: 108px; }
 
   .contract { grid-template-columns: 34px 1fr; grid-template-rows: auto auto; }
   .contract .seal { width: 32px; height: 32px; font-size: 9px; }
@@ -376,8 +471,9 @@ button.link { background: none; border: none; padding: 0; text-decoration: under
   #foot { margin: 0 12px 20px; }
 }
 
-/* 아주 좁은 폰 (~360px) */
-@media (max-width: 400px) {
-  .grid7 { grid-template-columns: repeat(3, 1fr); }
-  .grid7 .card[style*="span 3"] { grid-column: span 3; }
+/* 아주 좁은 폰 (~400px) — 매트 3열×4행, 한 화면 유지 */
+@media (max-width: 430px) {
+  .mat { grid-template-columns: repeat(3, 1fr); }
+  .mat .card[style*="span 3"] { grid-column: span 3; }
+  .mat .card, .slot-empty { min-height: 66px; }
 }

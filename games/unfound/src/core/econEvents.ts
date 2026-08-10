@@ -48,20 +48,24 @@ export class EventDeck {
   private readonly quietUntil: number;
 
   /**
+   * @param regions 드나들 수 있는 지역들 (v3.0 — 이동이 생겨 단일 지역이 아니다).
    * @param runIndex 1부터 센다. 첫 판은 턴 1~5 이벤트 0개, 저울의 날도 공고하지 않는다
    *                 (온보딩과 겹치지 않게 — SSOT "이벤트 온보딩 간섭 없음" 검산 유지).
    */
-  constructor(D: GameData, R: EconRules, region: Region, seed: number, runIndex: number) {
+  constructor(D: GameData, R: EconRules, regions: Region | Region[], seed: number, runIndex: number) {
     this.R = R;
     // 본류(makeRng(seed))와 다른 시드 — 황금비 상수로 밀어 상관을 끊는다.
     this.rng = makeRng(((seed ^ 0x9e3779b9) >>> 0) || 1);
     this.quietUntil = runIndex <= 1 ? R.eventQuietTurnsFirstRun : 1;
 
-    // 대상 계열: 이 지역에서 도달 가능한 결과물(B 이상)의 태그 — 팔 수 없는 계열을 지목하면 빈 이벤트다.
+    // 대상 계열: 드나들 수 있는 지역에서 도달 가능한 결과물(B 이상)의 태그 —
+    // 팔 수 없는 계열을 지목하면 빈 이벤트다.
     const tags = new Set<string>();
-    for (const r of reachableRecipes(D, region)) {
-      const c = D.cardById.get(r.result);
-      if (c && c.tier !== 'A') for (const t of c.tags) tags.add(t);
+    for (const region of Array.isArray(regions) ? regions : [regions]) {
+      for (const r of reachableRecipes(D, region)) {
+        const c = D.cardById.get(r.result);
+        if (c && c.tier !== 'A') for (const t of c.tags) tags.add(t);
+      }
     }
     this.tagPool = [...tags].sort(); // 결정적 순서
 

@@ -1,15 +1,16 @@
 /**
- * UNFOUND v2.2 수직 슬라이스 — 진입점.
+ * UNFOUND v3.0 수직 슬라이스 — 진입점.
  *
- * 하는 일은 넷뿐이다: 코어(EconSession)를 만들고, 클릭을 코어 동작으로 옮기고,
+ * 하는 일은 넷뿐이다: 코어(EconSession)를 만들고, 탭을 코어 동작으로 옮기고,
  * 회기 사이의 장기 시계(저울질 — 세션 내 변수, localStorage 금지)를 들고, 다시 그린다.
  * 규칙 판단은 한 줄도 여기 없다 — 있으면 시뮬과 사람이 다른 게임을 하게 된다.
+ * 조작은 전부 탭+선택→확인. 드래그 코드는 이 파일에 존재하지 않는다 (07 지시서).
  */
 import './econ.css';
 import { DATA } from '../data/browser.ts';
 import contractsJson from '../../data/contracts.json';
 import guestsJson from '../../data/guests.json';
-import { EconSession, type EconData, type GuestsFile, type PlayEvent } from '../core/econSession.ts';
+import { EconSession, DISPATCH_NAMES, type DispatchDest, type EconData, type GuestsFile, type PlayEvent } from '../core/econSession.ts';
 import {
   GRADE_NAMES, endRunCareer, newCareer, readEconRules, reviewRequirement, runsUntilReview,
   type CareerState, type ContractsFile, type EconRules,
@@ -50,7 +51,8 @@ let busy = false; // 연출 중 입력 잠금 (탭은 스킵으로만 동작)
 
 const V: ViewState = {
   selected: [], toast: null, signal: null, log: [], confirm: null,
-  showIntro: true, showCodex: false, hypo: null, offlineLog: !remoteEnabled(),
+  showIntro: true, showCodex: false, hypo: null, digPile: null, moveTo: null, dispatchOpen: false,
+  offlineLog: !remoteEnabled(),
   career: null, review: null, reviewDebut: null,
 };
 
@@ -71,12 +73,13 @@ function careerHud(): CareerHud | null {
 function newRun(): void {
   runIndex++;
   const seed = (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1;
-  S = new EconSession(D, seed, { carryKnown: carry, runIndex, guests: GUESTS });
+  S = new EconSession(D, seed, { carryKnown: carry, runIndex, grade: career.grade, guests: GUESTS });
   V.selected = []; V.signal = null; V.confirm = null; V.hypo = null; V.log = [];
+  V.digPile = null; V.moveTo = null; V.dispatchOpen = false;
   V.review = null; V.reviewDebut = null;
   runSettled = false;
   V.career = careerHud();
-  V.log.push(`${S.turn}턴 — 작업대에 ${S.field.length}장.`);
+  V.log.push(`${S.turn}턴 — 매트에 ${S.piles.length}장을 펼쳤다.`);
   sent = 0;
   drain();
   draw();
@@ -91,10 +94,12 @@ function drain(): void {
   }
 }
 
+function name(id: string): string { return S.card(id).name_ko; }
+
 function narrate(e: PlayEvent): void {
   if (e.t === 'event_pin') {
-    const name = e.kind === 'dream' ? '같은 꿈 소동' : '바깥 장수';
-    V.log.push(`게시판에 회색 핀 — ${name}, '${tagKo(e.tag)}' 계열. ${e.starts_at - e.turn}턴 뒤.`);
+    const nm = e.kind === 'dream' ? '같은 꿈 소동' : '바깥 장수';
+    V.log.push(`게시판에 회색 핀 — ${nm}, '${tagKo(e.tag)}' 계열. ${e.starts_at - e.turn}턴 뒤.`);
   } else if (e.t === 'scale_day') {
     V.log.push(`저울의 날 공고 — 이번 갠 사이 신규 복원 ${e.goal}종 출품이면 단서 1장.`);
   } else if (e.t === 'scale_day_reward') {
@@ -103,6 +108,16 @@ function narrate(e: PlayEvent): void {
     V.log.push('감정사가 지나가듯 말했다 — 단서 1장.');
   } else if (e.t === 'hint' && e.source === 'hypothesis') {
     V.log.push('가설이 맞았다 — 단서 1장.');
+  } else if (e.t === 'move_end') {
+    V.log.push(`${S.region.name_ko}에 닿았다. 경매도 시장도 이제 이 거리 것이다.`);
+  } else if (e.t === 'dispatch_return') {
+    V.log.push(`조수가 돌아왔다 — 보따리에 ${e.cards.map((c) => name(c)).join('·')}${e.person ? `, 그리고 ${name(e.person)}` : ''}.`);
+  } else if (e.t === 'feed') {
+    V.log.push(`${name(e.guest)}에게 ${name(e.card)}을(를) 내주었다 — 밥값.`);
+  } else if (e.t === 'strike') {
+    V.log.push(`${name(e.guest)}이(가) 배를 곯아 일을 놓았다 — 먹을 것을 구하면 다시 일한다.`);
+  } else if (e.t === 'strike_end') {
+    V.log.push(`${name(e.guest)}이(가) 다시 일을 잡았다.`);
   }
 }
 
@@ -110,8 +125,6 @@ function say(msg: string): void {
   V.log.push(msg);
   V.toast = msg;
 }
-
-function name(id: string): string { return S.card(id).name_ko; }
 
 function draw(): void {
   V.career = S.phase === 'over' ? V.career : careerHud();
@@ -175,8 +188,8 @@ function onRunOver(): void {
 /* ── 동작 ──────────────────────────────────────────────────── */
 
 async function doCombine(i: number, j: number): Promise<void> {
-  const nameA = name(S.field[i]);
-  const nameB = name(S.field[j]);
+  const nameA = name(S.spread[i]);
+  const nameB = name(S.spread[j]);
   const r = S.combine(i, j);
   drain();
   V.selected = [];
@@ -218,7 +231,7 @@ async function doCombine(i: number, j: number): Promise<void> {
     say('등유가 다 됐다 — 이번 턴 실험은 여기까지다.');
     logger.deadClick('combine_cap', S.turn);
   } else if (r.reason === 'no_slot') {
-    say('작업대가 좁다. 팔거나 버리고 다시.');
+    say('매트가 좁다. 팔거나 쌓거나 버리고 다시.');
     logger.deadClick('combine_no_slot', S.turn);
   }
   draw();
@@ -268,6 +281,77 @@ function onAction(act: string, el: HTMLElement): void {
       V.confirm = null;
       break;
 
+    // 2탭 쌓기 — 첫 카드를 둘째 더미 위에 얹는다 (드래그 없음)
+    case 'stack': {
+      if (V.selected.length !== 2) return;
+      const [from, to] = V.selected;
+      const moved = name(S.spread[from]);
+      const onto = name(S.spread[to]);
+      if (!S.restack(from, to)) { logger.deadClick('stack', S.turn); say('거긴 얹을 수 없다.'); break; }
+      V.selected = [];
+      say(`${moved}을(를) ${onto} 위에 얹었다.`);
+      break;
+    }
+
+    case 'unstack': {
+      if (V.selected.length !== 1) return;
+      if (!S.unstack(V.selected[0])) { logger.deadClick('unstack', S.turn); say('펼칠 자리가 없다.'); break; }
+      V.selected = [];
+      say('따로 놓았다.');
+      break;
+    }
+
+    case 'digmenu':
+      V.digPile = idx;
+      V.selected = [];
+      break;
+
+    case 'dig': {
+      if (V.digPile === null) return;
+      const pi = V.digPile;
+      if (!S.dig(pi, idx)) { logger.deadClick('dig', S.turn); break; }
+      V.digPile = null;
+      say(`안개 밑에서 ${name(S.spread[pi] ?? '')}이(가) 나왔다.`);
+      break;
+    }
+
+    case 'dig-close':
+      V.digPile = null;
+      break;
+
+    // 이동 — 지역 카드 탭 → 확인
+    case 'move':
+      V.moveTo = idx;
+      break;
+
+    case 'move-yes': {
+      const to = V.moveTo!;
+      V.moveTo = null;
+      if (!S.startMove(to)) { logger.deadClick('move', S.turn); say('지금은 떠날 수 없다.'); break; }
+      say(`${S.D.regions[to].name_ko}(으)로 떠난다 — 길 위에서 손은 계속 움직인다.`);
+      break;
+    }
+
+    case 'move-no':
+      V.moveTo = null;
+      break;
+
+    // 파견 — 행선지 3중 1택
+    case 'dispatch-open':
+      V.dispatchOpen = true;
+      break;
+
+    case 'dispatch-go': {
+      V.dispatchOpen = false;
+      if (!S.dispatch(id as DispatchDest)) { logger.deadClick('dispatch', S.turn); say('지금은 보낼 수 없다.'); break; }
+      say(`조수를 ${DISPATCH_NAMES[id as DispatchDest]}(으)로 보냈다 — ${S.R.dispatchTurns}턴 뒤 보따리.`);
+      break;
+    }
+
+    case 'dispatch-close':
+      V.dispatchOpen = false;
+      break;
+
     case 'buyer-yes': {
       const target = S.firstBuyer!;
       const tier = S.card(target).tier;
@@ -291,7 +375,7 @@ function onAction(act: string, el: HTMLElement): void {
 
     case 'visitor-yes': {
       const who = S.pendingVisitor!;
-      if (!S.acceptVisitor()) { say('작업대에 자리가 없다.'); break; }
+      if (!S.acceptVisitor()) { say('매트에 자리가 없다.'); break; }
       say(`${name(who)}을(를) 들였다. 맞는 물건을 쥐여줘 보자.`);
       break;
     }
@@ -305,11 +389,11 @@ function onAction(act: string, el: HTMLElement): void {
 
     case 'sell': {
       if (V.selected.length !== 1) return;
-      const si = V.selected[0];
-      const sid = S.field[si];
+      const pi = V.selected[0];
+      const sid = S.spread[pi];
       const warn = S.neededForContract(sid);
       const p = S.priceOfCard(sid);
-      if (!S.sell(si)) { logger.deadClick('sell', S.turn); say('지금은 팔 수 없다.'); break; }
+      if (!S.sell(pi)) { logger.deadClick('sell', S.turn); say('지금은 팔 수 없다.'); break; }
       V.selected = [];
       const e = S.events[S.events.length - 1];
       const toMerchant = e.t === 'sell' && e.to_merchant;
@@ -321,6 +405,13 @@ function onAction(act: string, el: HTMLElement): void {
       if (!S.buy(id)) { logger.deadClick('buy', S.turn); say('지금은 살 수 없다.'); break; }
       say(`${name(id)}을(를) 사 왔다.`);
       break;
+
+    case 'person': {
+      const got = S.buyPerson();
+      if (!got) { logger.deadClick('person', S.turn); say('소개받을 사람이 없다.'); break; }
+      say(`${name(got)}을(를) 소개받았다 — 맞는 물건을 쥐여줘 보자.`);
+      break;
+    }
 
     case 'hint': {
       const h = S.buyHint();
@@ -342,7 +433,7 @@ function onAction(act: string, el: HTMLElement): void {
     case 'discard': {
       if (V.selected.length !== 1) return;
       const di = V.selected[0];
-      const did = S.field[di];
+      const did = S.spread[di];
       if (!S.discard(di)) { logger.deadClick('discard', S.turn); break; }
       V.selected = [];
       say(S.isPersonLike(did) ? `${name(did)}이(가) 떠났다.` : `${name(did)}을(를) 버렸다.`);
@@ -351,7 +442,7 @@ function onAction(act: string, el: HTMLElement): void {
 
     case 'draft': {
       const before = S.turn;
-      if (!S.takeDraft(idx)) { logger.deadClick('draft', S.turn); say('칸이 모자란다.'); break; }
+      if (!S.takeDraft(idx)) { logger.deadClick('draft', S.turn); say('가져올 수 없다.'); break; }
       if (idx >= 0) say(`${before}턴 — 경매에서 한 장 건졌다.`);
       break;
     }
@@ -359,7 +450,7 @@ function onAction(act: string, el: HTMLElement): void {
     case 'end': {
       const wasOver = S.phase === 'over';
       S.endTurn();
-      V.selected = []; V.signal = null;
+      V.selected = []; V.signal = null; V.digPile = null;
       if (!wasOver && S.phase === 'over') onRunOver(); // 정산 후 재클릭에 심사가 중복 진행되면 안 된다
       else if (!wasOver) V.log.push(`${S.turn}턴 시작.`);
       break;
@@ -423,5 +514,49 @@ app.addEventListener('click', (ev) => {
   onAction(el.dataset.act!, el);
 });
 document.getElementById('fx')?.addEventListener('click', () => { skipFx(); });
+
+/* ── 드래그 조합 (데스크톱 보조 입력 — 2026-08-10 PSPD 재결정 "손맛").
+   탭+확인이 기본이고 폰은 탭만 쓴다. 드래그는 매트 카드→카드 조합 하나에만 붙인다 —
+   쌓기·이동·납품은 여전히 탭+확인이다 (SSOT [v3.0] 조작 절). */
+
+let dragFrom: number | null = null;
+
+const matCard = (ev: Event): HTMLElement | null =>
+  (ev.target as HTMLElement).closest<HTMLElement>('.mat [data-act="pick"]');
+
+app.addEventListener('dragstart', (ev) => {
+  const el = matCard(ev);
+  if (!el || busy || S.phase !== 'play') { ev.preventDefault(); return; }
+  dragFrom = Number(el.dataset.idx);
+  ev.dataTransfer?.setData('text/plain', String(dragFrom));
+  if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+});
+app.addEventListener('dragover', (ev) => {
+  if (dragFrom === null) return;
+  const el = matCard(ev);
+  if (!el || Number(el.dataset.idx) === dragFrom) return;
+  ev.preventDefault(); // 놓을 수 있다
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+  el.classList.add('dropover');
+});
+app.addEventListener('dragleave', (ev) => {
+  matCard(ev)?.classList.remove('dropover');
+});
+app.addEventListener('drop', (ev) => {
+  const el = matCard(ev);
+  if (!el || dragFrom === null) { dragFrom = null; return; }
+  ev.preventDefault();
+  el.classList.remove('dropover');
+  const from = dragFrom;
+  const to = Number(el.dataset.idx);
+  dragFrom = null;
+  if (busy || S.phase !== 'play' || from === to) return;
+  if (from < 0 || from >= S.piles.length || to < 0 || to >= S.piles.length) return;
+  V.selected = [];
+  const risky = S.isRiskyPair(from, to);
+  if (risky) { V.confirm = { i: from, j: to, resultName: risky.name_ko }; draw(); return; }
+  void doCombine(from, to);
+});
+app.addEventListener('dragend', () => { dragFrom = null; });
 
 newRun();
