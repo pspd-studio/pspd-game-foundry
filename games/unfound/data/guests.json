@@ -1,0 +1,31 @@
+{
+  "_comment": "v2.2 식객 맛보기 (SSOT 슬라이스 구성 원칙 — 빌드 계층의 씨앗, 효과는 코드 하드코딩 허용). 인물 카드는 공급 풀에 절대 넣지 않는다 — '떠도는 인물이 가게 앞에 온다' 방문 이벤트로만 지급(시드 보정, 런당 1~2회, 플로우 감사 #3 풀 희석 방지). 식객은 인물+물건 고유 레시피 2개로만 획득, 필드 1칸 점유, 펼쳐진 동안만 발동, 런 리셋(이월 금지). 도감 등재 대상. 이 파일은 recipes.json/cards.json에 합치지 않는다 — 합치면 계열 친화도(buildAffinity)가 변해 G2 재현이 깨진다. 세션이 자기만의 오버레이로 읽는다.",
+  "persons": [
+    { "id": "p_appraiser", "name_ko": "낯선 감정인", "tier": "P", "tags": ["person"], "slot_cost": 1 },
+    { "id": "p_watchman",  "name_ko": "등불 든 사내", "tier": "P", "tags": ["person"], "slot_cost": 1 }
+  ],
+  "guests": [
+    {
+      "id": "g_appraiser", "name_ko": "감정사", "tier": "G", "tags": ["person"], "slot_cost": 1,
+      "effect": "sale_hint",
+      "effect_ko": "판매할 때마다 이따금 그 계열의 단서를 흘려 준다"
+    },
+    {
+      "id": "g_watchman", "name_ko": "야경꾼", "tier": "G", "tags": ["person"], "slot_cost": 1,
+      "effect": "fail_detail",
+      "effect_ko": "실패 근접 신호가 한 단계 상세해진다"
+    }
+  ],
+  "recipes": [
+    {
+      "id": "gr_appraiser", "inputs": ["p_appraiser", "compass"], "result": "g_appraiser",
+      "conditions": [],
+      "discovery_text": "나침반을 쥐여주자 바늘보다 눈이 먼저 진짜를 가리켰다."
+    },
+    {
+      "id": "gr_watchman", "inputs": ["p_watchman", "torch"], "result": "g_watchman",
+      "conditions": [],
+      "discovery_text": "횃불을 쥐여주자 밤이 그의 근무지가 되었다."
+    }
+  ]
+}

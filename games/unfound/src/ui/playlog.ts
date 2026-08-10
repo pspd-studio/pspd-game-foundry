@@ -63,11 +63,20 @@ export function createPlayLogger(sessionId?: string) {
     addSink(s: PlaySink) { sinks.push(s); },
     snapshot(): PlayRecord[] { return records.slice(); },
 
-    /** 세션 요약 — G3 기준 4종 + 마찰 계측의 원재료. */
+    /** 세션 요약 — G3 기준 4종 + 마찰 계측 + v2.2 계측(가설·식객·이벤트 응답·심사·연쇄)의 원재료. */
     summary() {
       const runs = new Set(records.map((r) => r.run)).size;
       const ends = records.filter((r) => r.event.t === 'run_end');
       const failedRuns = ends.filter((r) => r.event.t === 'run_end' && r.event.run_fail).length;
+
+      // v2.2 계측 (07 지시서 작업 8) — 전부 run_end/review 이벤트에서 집계한다
+      const endEvents = ends.map((r) => r.event as Record<string, unknown>);
+      const sum = (k: string): number =>
+        endEvents.reduce((s, e) => s + (typeof e[k] === 'number' ? (e[k] as number) : 0), 0);
+      const reviews = records
+        .filter((r) => r.event.t === 'review')
+        .map((r) => r.event as Record<string, unknown>)
+        .map((e) => ({ pass: Boolean(e.pass), was_retry: Boolean(e.was_retry), achieved: e.achieved, required: e.required }));
 
       // 플레이어가 기대했지만 없던 조합 — 다음 콘텐츠의 최고 근거
       const failPairs = new Map<string, number>();
@@ -93,6 +102,15 @@ export function createPlayLogger(sessionId?: string) {
         dead_clicks: [...deadClickCount].sort((a, b) => b[1] - a[1]),
         dead_click_total: deadClicks.length,
         events: records.length,
+        // v2.2 (07 지시서 작업 8)
+        hypotheses_written: sum('hypotheses'),
+        hypothesis_hits: sum('hypothesis_hits'),
+        guests_joined: sum('guests_joined'),
+        guest_turns: sum('guest_turns'),
+        merchant_sells: sum('merchant_sells'),
+        ledger_blocks: sum('ledger_blocks'),
+        max_chain_per_run: endEvents.map((e) => (typeof e.max_chain === 'number' ? e.max_chain : 0)),
+        reviews,
       };
     },
   };

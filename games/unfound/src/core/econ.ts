@@ -49,12 +49,60 @@ export interface EconRules {
   startingMaxDuplicate: number;
   /** 공급 후보 3장을 서로 다르게 뽑을지. */
   supplyDistinct: boolean;
+
+  /* ── v2.2 (2026-08-10 패치) — 전부 스위치. OFF면 v2.1과 완전히 같은 동작·난수 순서다. ── */
+
+  /** 이벤트 덱 (같은 꿈 소동·바깥 장수·저울의 날). */
+  eventsOn: boolean;
+  /** 가격 배수 총 상한 (프리미엄 포함, max 규칙 — SSOT "곱셈 금지"). */
+  eventPriceCap: number;
+  /** 턴당 이벤트 예고가 뜰 확률 (핀 자리가 빌 때). */
+  eventChance: number;
+  /** 첫 판(1회기)에서 이벤트가 잠드는 턴 수 (SSOT: 첫 판 턴 1~5 이벤트 0개). */
+  eventQuietTurnsFirstRun: number;
+  eventDreamMult: number;
+  eventDreamNotice: number;
+  eventDreamDuration: number;
+  eventMerchantMult: number;
+  eventMerchantNotice: number;
+  /** 저울의 날 — 이번 회기 신규 복원 목표 종 수 (달성 시 단서 1장). */
+  eventScaleDayCount: number;
+  /** 저울의 날이 회기 시작에 공고될 확률. */
+  eventScaleDayChance: number;
+
+  /** 승급 심사 「저울질」. */
+  reviewOn: boolean;
+  reviewFirstAfterRuns: number;
+  reviewEveryRuns: number;
+  reviewFirstCount: number;
+  reviewCount: number;
+  reviewRetryAfterRuns: number;
+  /** 등급별 tier C 신규 복원 요구 (도제=1, 등급마다 1단계 상승 — SSOT 장기 시계). */
+  reviewTierCReq: number[];
+
+  /** 계약 게시판 수주 (분모 3 고정 — 미수주 = 자동 미달). */
+  contractBoardOn: boolean;
+  /** 실패쌍 장부 자동 기록 — 동일 실패쌍 재시도는 상한을 소모하지 않는다. */
+  failLedgerOn: boolean;
+  /** 온보딩(push+시장 잠금)을 첫 런 한정으로. 2런차부터 턴 1 드래프트·시장 개방. */
+  onboardingFirstRunOnly: boolean;
+  /** 난이도 튜닝 손잡이: mid 계약 요구 수량 보정 (음수 = 하향, 최소 1). */
+  midCountOffset: number;
+  /** 중간 마감 턴 재배치 (SSOT v2.2 "중간 마감 10턴"). 0이면 계약 데이터 원본(8턴) 유지. */
+  midDeadline: number;
 }
+
+/** 5급 명칭 (SSOT 장기 시계 — 견습→도제→공인→장인→명장). 데이터가 아니라 규칙 어휘라 여기 산다. */
+export const GRADE_NAMES = ['견습', '도제', '공인', '장인', '명장'] as const;
 
 const num = (rules: Rules, k: string, fb: number): number =>
   (typeof rules[k] === 'number' ? (rules[k] as number) : fb);
 const obj = (rules: Rules, k: string, fb: TierMap): TierMap =>
   (rules[k] && typeof rules[k] === 'object' ? (rules[k] as TierMap) : fb);
+const flag = (rules: Rules, k: string, fb: boolean): boolean =>
+  (rules[k] === undefined ? fb : rules[k] === true || rules[k] === 1);
+const nums = (rules: Rules, k: string, fb: number[]): number[] =>
+  (Array.isArray(rules[k]) ? (rules[k] as number[]) : fb);
 
 export function readEconRules(rules: Rules): EconRules {
   const basePrice = obj(rules, 'v2_base_price', { A: 4, B: 12, C: 30 });
@@ -80,6 +128,31 @@ export function readEconRules(rules: Rules): EconRules {
     startingMinRecipes: num(rules, 'v2_starting_min_recipes', 2),
     startingMaxDuplicate: num(rules, 'v2_starting_max_duplicate', 2),
     supplyDistinct: rules['v2_supply_distinct'] === undefined ? true : rules['v2_supply_distinct'] === true,
+
+    // v2.2 — 스위치 기본값은 전부 OFF. 켜는 것은 rules.json이 한다 (G2 재현이 기본이어야 한다).
+    eventsOn: flag(rules, 'v22_events', false),
+    eventPriceCap: num(rules, 'v22_event_price_cap', 4),
+    eventChance: num(rules, 'v22_event_chance', 0.25),
+    eventQuietTurnsFirstRun: num(rules, 'v22_event_quiet_turns_first_run', 5),
+    eventDreamMult: num(rules, 'v22_event_dream_mult', 2),
+    eventDreamNotice: num(rules, 'v22_event_dream_notice', 3),
+    eventDreamDuration: num(rules, 'v22_event_dream_duration', 3),
+    eventMerchantMult: num(rules, 'v22_event_merchant_mult', 2),
+    eventMerchantNotice: num(rules, 'v22_event_merchant_notice', 1),
+    eventScaleDayCount: num(rules, 'v22_event_scale_day_count', 3),
+    eventScaleDayChance: num(rules, 'v22_event_scale_day_chance', 0.35),
+    reviewOn: flag(rules, 'v22_review', false),
+    reviewFirstAfterRuns: num(rules, 'v22_review_first_after_runs', 2),
+    reviewEveryRuns: num(rules, 'v22_review_every_runs', 3),
+    reviewFirstCount: num(rules, 'v22_review_first_count', 8),
+    reviewCount: num(rules, 'v22_review_count', 12),
+    reviewRetryAfterRuns: num(rules, 'v22_review_retry_after_runs', 2),
+    reviewTierCReq: nums(rules, 'v22_review_tier_c_req', [1, 2, 3, 4]),
+    contractBoardOn: flag(rules, 'v22_contract_board', false),
+    failLedgerOn: flag(rules, 'v22_fail_ledger', false),
+    onboardingFirstRunOnly: flag(rules, 'v22_onboarding_first_run_only', false),
+    midCountOffset: num(rules, 'v22_mid_count_offset', 0),
+    midDeadline: num(rules, 'v22_mid_deadline', 0),
   };
 }
 
@@ -166,17 +239,27 @@ export interface PriceContext {
   /** 티어별 누적 판매 유닛 */
   tierSold: TierMap;
   saturationOff?: boolean;
+  /**
+   * v2.2 이벤트 가격 배수 (같은 꿈 소동·바깥 장수). 없으면 ×1.
+   * 배수끼리는 곱하지 않고 **max**로 겹치고 총 상한은 eventPriceCap이다
+   * (SSOT 이벤트 덱 — "가격 배수는 곱셈이 아니라 max, 총 상한 ×4". 프리미엄 포함).
+   */
+  eventMultOf?: (card: Card) => number;
 }
 
 /**
- * 판매가. 첫 발견 프리미엄(×2/×2.5/×4) → 티어 풀 포화 감쇠(r^k) 순으로 적용한다.
- * 원본 econ2.mjs의 price()와 같은 식이다 — 이 함수가 유일한 구현이다.
+ * 판매가. 배수(첫 발견 프리미엄 ×2/×2.5/×4, 이벤트 배수)를 max로 겹쳐 상한 ×4까지 적용한 뒤
+ * 티어 풀 포화 감쇠(r^k)를 곱한다. 이벤트가 없으면 원본 econ2.mjs의 price()와 같은 값이 나온다 —
+ * 이 함수가 유일한 구현이다.
  */
 export function priceOf(_D: GameData, R: EconRules, ctx: PriceContext, card: Card): number {
   const tier = card.tier;
   let p = R.basePrice[tier] ?? 2;
+  let boost = 1;
   if (card.tier !== 'A' && ctx.codex.has(card.id) && !ctx.initialResults.has(card.id) && !ctx.soldOnce.has(card.id))
-    p *= R.firstPremium[tier] ?? 1;
+    boost = Math.max(boost, R.firstPremium[tier] ?? 1);
+  if (ctx.eventMultOf) boost = Math.max(boost, ctx.eventMultOf(card));
+  p *= Math.min(boost, R.eventPriceCap);
   const over = (ctx.tierSold[tier] ?? 0) - (R.demandPool[tier] ?? 99);
   if (!ctx.saturationOff && over >= 0) p *= Math.pow(R.saturationR, over + 1);
   return Math.round(p);
@@ -212,10 +295,30 @@ export interface RunContract extends ContractDef {
   done: boolean;
   failed: boolean;
   kindsDone: Set<string>;
+  /**
+   * v2.2 게시판 수주 — false면 아직 게시 중인 어음이다 (납품 불가, 마감 지나면 자동 미달).
+   * 게시판 스위치가 꺼져 있으면 항상 true (v2.1 자동 배정과 동일).
+   */
+  claimed: boolean;
 }
 
-/** 런의 계약 3건을 뽑는다 (mid n + late m). rng 호출 순서는 원본과 같다. */
-export function rollContracts(file: ContractsFile, rng: () => number): RunContract[] {
+/** v2.2 난이도 손잡이를 계약 한 건에 적용한다 (mid 수량 보정 + 중간 마감 재배치). */
+export function tuneContract(c: ContractDef, midCountOffset: number, midDeadline: number): ContractDef {
+  if (c.slot !== 'mid') return c;
+  return {
+    ...c,
+    count: typeof c.count === 'number' ? Math.max(1, c.count + midCountOffset) : c.count,
+    deadline: midDeadline > 0 ? midDeadline : c.deadline,
+  };
+}
+
+/**
+ * 런의 계약 3건을 뽑는다 (mid n + late m). rng 호출 순서는 원본과 같다.
+ * midCountOffset·midDeadline은 난이도 튜닝 손잡이 (rules.json v22_*) — 0이면 원본과 동일.
+ */
+export function rollContracts(
+  file: ContractsFile, rng: () => number, midCountOffset = 0, claimed = true, midDeadline = 0,
+): RunContract[] {
   const mids = file.contracts.filter((c) => c.slot === 'mid');
   const lates = file.contracts.filter((c) => c.slot === 'late');
   const pickN = (arr: ContractDef[], n: number): ContractDef[] => {
@@ -225,7 +328,10 @@ export function rollContracts(file: ContractsFile, rng: () => number): RunContra
     return out;
   };
   return [...pickN(mids, file.run_pick.mid), ...pickN(lates, file.run_pick.late)]
-    .map((c) => ({ ...c, delivered: 0, done: false, failed: false, kindsDone: new Set<string>() }));
+    .map((c) => ({
+      ...tuneContract(c, midCountOffset, midDeadline),
+      delivered: 0, done: false, failed: false, kindsDone: new Set<string>(), claimed,
+    }));
 }
 
 /** 이 계약에 납품 가능한 필드 인덱스. 없으면 -1. */
@@ -257,9 +363,17 @@ export function neededByContract(
   });
 }
 
-/** 계약 한 건 설명문 (UI·로그 공용). */
-export function contractLabel(D: GameData, c: ContractDef): string {
-  if (c.kind === 'gold') return `자금 ${c.amount}G 보유`;
+/** 골드 액수를 행동 환산으로 병기 (벤치마크 문법 3 — "골드 X"는 감이 안 온다). */
+export function goldInActions(R: EconRules, amount: number): string {
+  const base = R.basePrice.B ?? 12;
+  const n = Math.max(1, Math.round(amount / base));
+  return `B급 ${n}번 판 값`;
+}
+
+/** 계약 한 건 설명문 (UI·로그 공용). R을 주면 골드 계약에 행동 환산을 병기한다. */
+export function contractLabel(D: GameData, c: ContractDef, R?: EconRules): string {
+  if (c.kind === 'gold')
+    return `자금 ${c.amount}G 보유${R ? ` (${goldInActions(R, c.amount ?? 0)})` : ''}`;
   if (c.kind === 'tier_count') return `${c.tier}급 상품 ${c.count}개 납품`;
   if (c.kind === 'distinct_tier') return `서로 다른 ${c.tier}급 상품 ${c.count}종 납품`;
   if (c.kind === 'discovery') return `이 런에서 새로 발견한 상품 ${c.count}개 납품`;
@@ -343,6 +457,125 @@ export function settleRun(R: EconRules, contracts: RunContract[], gold: number):
     gold,
     settle: runFail ? Math.round(gold * R.failSettlement) : gold,
   };
+}
+
+/* ── 승급 심사 「저울질」 (v2.2 — SSOT 장기 시계) ─────────────────
+   1회기 = 1런. 첫 심사는 2회기 종료 시, 이후 3회기마다 자동 판정 (신청·비용 없음).
+   잣대는 도감 단일축: 심사 창(직전 심사 이후) 신규 복원 종 수 + tier C 조건.
+   낙방 = 강등·몰수 없음, 유예 + 2런 뒤 재심. 보상 "공간 1개"는 슬라이스에선 문구 스텁. */
+
+export interface CareerState {
+  /** 0=견습 … 4=명장 (GRADE_NAMES 인덱스) */
+  grade: number;
+  /** 마친 회기(런) 수 */
+  runsDone: number;
+  /** 이 회기 수를 마치는 순간 심사가 열린다 */
+  nextReviewAfter: number;
+  /** 심사 창 안의 신규 복원 종 수 (계정 도감에 새로 등재된 결과물) */
+  newSinceReview: number;
+  /** 그중 tier C */
+  cNewSinceReview: number;
+  firstReviewDone: boolean;
+  /** 직전 심사 낙방 — 유예 중 (2런 뒤 재심) */
+  deferred: boolean;
+}
+
+export function newCareer(R: EconRules): CareerState {
+  return {
+    grade: 0, runsDone: 0, nextReviewAfter: R.reviewFirstAfterRuns,
+    newSinceReview: 0, cNewSinceReview: 0, firstReviewDone: false, deferred: false,
+  };
+}
+
+export interface ReviewResult {
+  held: boolean;
+  pass: boolean;
+  wasRetry: boolean;
+  required: number;
+  achieved: number;
+  tierCRequired: number;
+  tierCAchieved: number;
+  /** 심사 직후 등급 (GRADE_NAMES 인덱스) */
+  grade: number;
+}
+
+/** 다음 심사까지 남은 회기 수 (0이면 이번 정산이 심사다). 명장은 null. */
+export function runsUntilReview(cs: CareerState): number | null {
+  if (cs.grade >= GRADE_NAMES.length - 1) return null;
+  return Math.max(0, cs.nextReviewAfter - cs.runsDone);
+}
+
+/** 현재 심사 창의 요구치. */
+export function reviewRequirement(R: EconRules, cs: CareerState): { count: number; tierC: number } {
+  return {
+    count: cs.firstReviewDone ? R.reviewCount : R.reviewFirstCount,
+    tierC: R.reviewTierCReq[Math.min(cs.grade, R.reviewTierCReq.length - 1)] ?? 0,
+  };
+}
+
+/**
+ * 회기 하나를 마감한다 — 신규 복원 수를 창에 누적하고, 때가 되면 심사를 연다.
+ * cs를 제자리에서 고친다 (호출자가 세션 간 상태를 들고 있다 — localStorage 금지, SSOT).
+ */
+export function endRunCareer(
+  R: EconRules, cs: CareerState, newDiscoveries: number, newCDiscoveries: number,
+): ReviewResult {
+  cs.runsDone++;
+  cs.newSinceReview += newDiscoveries;
+  cs.cNewSinceReview += newCDiscoveries;
+
+  const noMore = cs.grade >= GRADE_NAMES.length - 1; // 명장 — 전당 기록 전환, 심사 없음
+  const req = reviewRequirement(R, cs);
+  const base: ReviewResult = {
+    held: false, pass: false, wasRetry: cs.deferred,
+    required: req.count, achieved: cs.newSinceReview,
+    tierCRequired: req.tierC, tierCAchieved: cs.cNewSinceReview, grade: cs.grade,
+  };
+  if (noMore || cs.runsDone < cs.nextReviewAfter) return base;
+
+  const pass = cs.newSinceReview >= req.count && cs.cNewSinceReview >= req.tierC;
+  if (pass) {
+    cs.grade = Math.min(cs.grade + 1, GRADE_NAMES.length - 1);
+    cs.firstReviewDone = true;
+    cs.deferred = false;
+    cs.newSinceReview = 0;
+    cs.cNewSinceReview = 0;
+    cs.nextReviewAfter = cs.runsDone + R.reviewEveryRuns;
+  } else {
+    cs.deferred = true; // 유예 — 창은 리셋하지 않는다 (계속 모아 재심)
+    cs.nextReviewAfter = cs.runsDone + R.reviewRetryAfterRuns;
+  }
+  return { ...base, held: true, pass, grade: cs.grade };
+}
+
+/* ── 실패 = 정보: 계열 힌트 1비트 (v2.2) ─────────────────────────
+   실패 근접 신호에 계열 힌트를 최소 1비트 보장한다 (SSOT 조합 실패).
+   난수를 쓰지 않는다 — 같은 쌍이면 항상 같은 힌트가 나와야 하고(장부 기록과 정합),
+   시뮬 난수 순서도 건드리면 안 된다. 두 카드의 태그쌍 중 레시피 빈도가 가장 높은 쌍을 고른다. */
+
+export interface FailHint {
+  /** 두 카드에서 뽑은 대표 태그쌍 */
+  ta: string;
+  tb: string;
+  /** 이 태그쌍이 실제 레시피 문법에 있는가 (warm의 근거) */
+  grammatical: boolean;
+}
+
+export function failHintOf(D: GameData, aff: Map<string, number>, idA: string, idB: string): FailHint | null {
+  const a = D.cardById.get(idA);
+  const b = D.cardById.get(idB);
+  if (!a || !b || !a.tags.length || !b.tags.length) return null;
+  let best: FailHint | null = null;
+  let bestScore = -1;
+  for (const ta of a.tags) for (const tb of b.tags) {
+    const s = aff.get([ta, tb].sort().join('|')) ?? 0;
+    // 동점이면 사전순 — 결정적이어야 한다
+    if (s > bestScore || (s === bestScore && best && `${ta}|${tb}` < `${best.ta}|${best.tb}`)) {
+      bestScore = s;
+      best = { ta, tb, grammatical: s > 0 };
+    }
+  }
+  return best;
 }
 
 export { pairKey };

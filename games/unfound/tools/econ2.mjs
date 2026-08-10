@@ -8,5 +8,6 @@
 export {
   readEconRules, buildAffinity, affinityScore, reachableRecipes,
   slotUsed, pairsOf, priceOf, rollContracts, rollStartingField, rollSupply, settleRun,
+  newCareer, endRunCareer, reviewRequirement, runsUntilReview, GRADE_NAMES, pairKey,
 } from '../src/core/econ.ts';
 export { playEconRun } from '../src/core/econAuto.ts';

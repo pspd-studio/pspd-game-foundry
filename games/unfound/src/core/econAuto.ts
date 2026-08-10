@@ -15,6 +15,7 @@ import {
   settleRun, slotUsed,
   type ContractsFile, type PriceContext, type RunContract, type TierMap,
 } from './econ.ts';
+import { EventDeck } from './econEvents.ts';
 
 export type EconPolicy = 'greedy' | 'reasoner' | 'preknown';
 
@@ -24,6 +25,8 @@ export interface EconRunOpts {
   fullCodex?: boolean;
   regionIdx?: number;
   carryKnown?: string[];
+  /** v2.2 — 몇 번째 회기(런)인가. 온보딩 첫 런 한정·이벤트 침묵 규칙이 본다. 기본 1. */
+  runIndex?: number;
 }
 
 export type EconEvent =
@@ -74,12 +77,24 @@ export function playEconRun(
     [...known].map((k) => D.recipeByKey.get(k)?.result).filter(Boolean) as string[],
   );
 
-  const contracts: RunContract[] = rollContracts(D.contracts, rng);
+  // v2.2 — 게시판 수주: AI는 게시된 어음을 즉시 수주한다(= v2.1 자동 배정과 같은 결과).
+  // mid 수량·마감 보정은 rules.json 손잡이. 스위치가 전부 꺼져 있으면 v2.1과 동일한 계약이 나온다.
+  const contracts: RunContract[] = rollContracts(D.contracts, rng, R.midCountOffset, true, R.midDeadline);
+  // 심사(저울질) 창 카운트 기준선 — "신규 복원"은 장부에 새로 적힌 레시피 수다 (도감 단일축)
+  const initialKnown = new Set(known);
 
   let field: string[] = rollStartingField(D, R, region, rng);
 
+  const runIndex = Math.max(1, opts.runIndex ?? 1);
+  // v2.2 — 온보딩 첫 런 한정: 2런차부터 턴 1 드래프트·시장 개방 (플로우 감사 #7)
+  const draftFrom = R.onboardingFirstRunOnly && runIndex >= 2 ? 1 : R.draftFromTurn;
+  // v2.2 — 이벤트 덱: 별도 난수 스트림. OFF면 본류 난수 순서는 v2.1과 완전히 같다.
+  const eventDeck = R.eventsOn ? new EventDeck(D, R, region, seed, runIndex) : null;
+  // v2.2 — 실패쌍 장부: 같은 실패쌍은 런 안에서 다시 긁지 않는다 (상한 절약 = 사람과 같은 이득)
+  const failedPairs = new Set<string>();
+
   let gold = R.startingGold;
-  let marketOpen = false;
+  let marketOpen = R.onboardingFirstRunOnly && runIndex >= 2;
   const soldOnce = new Set<string>(); // 첫 판매 프리미엄 소진 여부 (결과물 id)
   const tierSold: TierMap = { A: 0, B: 0, C: 0 };
   const soldKinds = new Set<string>();
@@ -87,7 +102,10 @@ export function playEconRun(
   let combosTotal = 0, combosLast3 = 0, giveUps = 0, firstSaleTurn = 0, firstCTurn = 0;
   const goldCurve: Array<{ turn: number; gold: number; combos: number }> = [];
 
-  const pctx: PriceContext = { codex, initialResults, soldOnce, tierSold, saturationOff: opts.saturationOff };
+  const pctx: PriceContext = {
+    codex, initialResults, soldOnce, tierSold, saturationOff: opts.saturationOff,
+    eventMultOf: eventDeck ? (c) => eventDeck.multOf(turn, c) : undefined,
+  };
   const price = (card: { id: string; tier: string }) => priceOf(D, R, pctx, D.cardById.get(card.id)!);
 
   const removeAt = (idx: number) => field.splice(idx, 1)[0];
@@ -113,13 +131,14 @@ export function playEconRun(
 
   let turn = 0;
   for (turn = 1; turn <= R.runTurns; turn++) {
-    // 1) 공급 (턴 1~3 push / 이후 드래프트 1장)
+    eventDeck?.beginTurn(turn);
+    // 1) 공급 (턴 1~3 push / 이후 드래프트 1장. 2런차부터는 턴 1 드래프트 — v2.2 스위치)
     const candidates = rollSupply(R, region, rng);
     const accept = (id: string): boolean => {
       if (slotUsed(D, field) + D.cardById.get(id)!.slot_cost <= R.fieldSlots) { field.push(id); return true; }
       return false;
     };
-    if (turn < R.draftFromTurn) {
+    if (turn < draftFrom) {
       for (const id of candidates) if (!accept(id)) emit({ t: 'supply_skipped' });
     } else {
       // 드래프트: 정책별 선택. 나머지는 소멸 (= 매 턴 2장 포기 — 배타성)
@@ -162,9 +181,14 @@ export function playEconRun(
       const cap = R.supply * R.unknownAttemptFactor;
       let attempts = 0;
       const tried = new Set<string>();
+      // v2.2 실패쌍 장부: 이미 실패로 적힌 쌍은 후보에서 뺀다 (재시도 무의미 — 상한 절약).
+      // 스위치 OFF면 failedPairs가 항상 비어 있어 v2.1과 같은 후보·같은 난수 소비다.
+      const notLedgered = ([i, j]: [number, number]): boolean =>
+        !failedPairs.has(pairKey(field[i], field[j]));
       while (attempts < cap) {
         const cand = pairsOf(field)
-          .filter(([i, j]) => !known.has(pairKey(field[i], field[j])) && !tried.has(pairKey(field[i], field[j])));
+          .filter(([i, j]) => !known.has(pairKey(field[i], field[j])) && !tried.has(pairKey(field[i], field[j])))
+          .filter(notLedgered);
         if (!cand.length) break;
         let pick: [number, number];
         if (policy === 'reasoner') {
@@ -175,11 +199,15 @@ export function playEconRun(
         const key = pairKey(field[pick[0]], field[pick[1]]);
         tried.add(key);
         attempts++;
-        if (!tryCombine(pick[0], pick[1])) emit({ t: 'near_miss' });
+        if (!tryCombine(pick[0], pick[1])) {
+          if (R.failLedgerOn) failedPairs.add(key);
+          emit({ t: 'near_miss' });
+        }
       }
       if (attempts >= cap) {
         const remaining = pairsOf(field)
-          .filter(([i, j]) => !known.has(pairKey(field[i], field[j])) && !tried.has(pairKey(field[i], field[j])));
+          .filter(([i, j]) => !known.has(pairKey(field[i], field[j])) && !tried.has(pairKey(field[i], field[j])))
+          .filter(notLedgered);
         if (remaining.length) giveUps++; // 더 긁고 싶었는데 상한
       }
     }
@@ -255,6 +283,7 @@ export function playEconRun(
         soldKinds.add(sold.id);
         tierSold[sold.card.tier] = (tierSold[sold.card.tier] ?? 0) + 1;
         revenueByCard.set(sold.id, (revenueByCard.get(sold.id) ?? 0) + p);
+        if (!firstSaleTurn) firstSaleTurn = turn; // 2런차 시장 개방 시 구매자 방문 없이 첫 판매가 여기서 난다
         emit({ t: 'sell', card: sold.id, gold: p, turn });
       } else if (wantBuy) {
         const cost = Math.round(R.basePrice.A * R.buyMarkup);
@@ -288,6 +317,16 @@ export function playEconRun(
   const s = settleRun(R, contracts, gold);
   const topRevenue = Math.max(0, ...revenueByCard.values());
   const totalRevenue = [...revenueByCard.values()].reduce((acc, x) => acc + x, 0);
+  // 심사(저울질) 창 누적용 — 이번 런에 장부에 새로 적힌 레시피 수 (이월분 제외)
+  let newDiscov = 0, newDiscovC = 0;
+  for (const k of known) {
+    if (initialKnown.has(k)) continue;
+    newDiscov++;
+    if (D.cardById.get(D.recipeByKey.get(k)?.result ?? '')?.tier === 'C') newDiscovC++;
+  }
+  // 계약별 이행 (첫 계약 90%+ 검증용)
+  const midDone = contracts.filter((c) => c.slot === 'mid' && c.done).length;
+  const midTotal = contracts.filter((c) => c.slot === 'mid').length;
   emit({
     t: 'run_end', turn: R.runTurns, gold, settle: s.settle, runFail: s.runFail,
     fulfilled: s.fulfilled, contractsTotal: s.contractsTotal,
@@ -296,5 +335,6 @@ export function playEconRun(
     earlyGoldRate: (goldCurve[6]?.gold ?? gold) / 7,
     lateGoldRate: (gold - (goldCurve[goldCurve.length - 8]?.gold ?? 0)) / 7,
     combosLast3: combosTotal - combosLast3, soldKinds: soldKinds.size, knownKeys: [...known],
+    newDiscov, newDiscovC, midDone, midTotal,
   });
 }

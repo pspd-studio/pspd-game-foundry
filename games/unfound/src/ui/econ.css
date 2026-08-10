@@ -97,10 +97,16 @@ html, body {
 .card.tA { border-left-color: var(--tA); }
 .card.tB { border-left-color: var(--tB); }
 .card.tC { border-left-color: var(--tC); }
+/* 인물(P)·식객(G) — 사람은 점선 테두리로 물건과 구분한다 */
+.card.tP { border-left-color: var(--coin); border-style: dashed; }
+.card.tG { border-left-color: var(--coin); background: #fdf8e4; }
+.ceffect { font-size: 10px; color: var(--coin); }
 .cname { font-size: 15px; font-weight: 600; }
 .cmeta { font-size: 11px; color: var(--ink-soft); }
 .cprice { font-size: 12px; color: var(--coin); margin-top: auto; font-variant-numeric: tabular-nums; }
 .cprice .prem { color: var(--seal); font-size: 10px; }
+/* 이벤트가 값을 밀어 올린 물건 — 수요 칸 금색 (SSOT: 기존 지물의 상태 변화로만) */
+.cprice.evt { color: #b8860b; font-weight: 700; text-shadow: 0 0 6px rgba(184, 134, 11, .35); }
 .tags { display: flex; flex-wrap: wrap; gap: 3px; }
 .tags i { font-style: normal; font-size: 9px; color: var(--ink-soft); border: 1px solid var(--rule); padding: 0 3px; }
 .badge.need {
@@ -130,6 +136,113 @@ button.link { background: none; border: none; padding: 0; text-decoration: under
 .signal small { display: block; color: var(--ink-soft); font-size: 11px; }
 .signal.warm { border-left-color: var(--seal); background: #f7ece0; }
 .signal.cold { background: #eceadf; color: var(--ink-soft); }
+/* 실패 = 정보: 계열 힌트는 반 박자 늦게 떠오른다 (③ 연출 — CSS만) */
+.signal .fadein { opacity: 0; animation: fadein .5s ease .45s forwards; color: var(--ink-soft); }
+.signal .fadein.slow { animation-delay: .95s; }
+@keyframes fadein { to { opacity: 1; } }
+.hintline.foretell { color: var(--seal); }
+.hintline.done { color: var(--tA); }
+
+/* ── 장기 시계 (HUD 회기 카운터) ─────────────────────────── */
+.hud .career { font-size: 13px; }
+.hud .career small { display: block; color: var(--ink-soft); font-size: 11px; }
+
+/* ── 게시판 핀 2자리 (예고=회색 ○ / 발동=색 ●) ───────────── */
+.pins { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.pin {
+  font-size: 12px; color: var(--ink-soft); padding: 4px 8px;
+  border: 1px dashed var(--rule); background: #f3ecdb;
+}
+.pin small { display: block; font-size: 10px; }
+.pin.live { border-style: solid; border-color: var(--seal); color: var(--ink); background: #f9ebe2; }
+.pin.live.gold { border-color: #b8860b; background: #faf3dc; }
+.pin.empty { opacity: .5; }
+
+/* ── 저울질 결과 상자 (정산 화면 안 — 새 화면 아님) ───────── */
+.reviewbox { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--rule); background: #f3ecdb; }
+.reviewbox.debut p { margin: 0 0 2px; font-size: 13px; }
+.reviewbox.pass { border-color: var(--tA); }
+.reviewbox.defer { border-color: var(--ink-soft); }
+.reset-notice { border-top: 1px solid var(--rule); padding-top: 8px; margin-top: 12px; }
+
+/* ── 가설 기입 ────────────────────────────────────────────── */
+.codex button.hole { cursor: pointer; font: inherit; font-size: 12px; }
+.codex .hole.penned { border-style: solid; border-color: var(--coin); }
+.codex .hole i { font-style: normal; color: var(--coin); }
+.codex .hole.still { pointer-events: none; }
+.codex .countline { font-size: 12px; color: var(--ink-soft); padding: 2px 0; }
+.matrow { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0; max-height: 40vh; overflow: auto; }
+.matrow .mat { font-size: 13px; padding: 4px 8px; }
+.matrow .mat.sel { outline: 2px solid var(--seal); background: #fff8e8; }
+
+/* ── 발견 연출 (#fx — 심야 개정 B. 순간당 ≤1.5초, 탭=스킵) ── */
+#fx:empty { display: none; }
+#fx {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-items: center;
+  pointer-events: auto; background: rgba(34, 28, 20, .18);
+}
+.fx-center { position: relative; display: grid; place-items: center; gap: 8px; text-align: center; }
+.fx-card {
+  display: inline-block; padding: 10px 14px; border: 1px solid var(--ink); background: #fbf6ea;
+  font-size: 15px; font-weight: 600; animation: fx-tocenter .3s ease both;
+}
+.fx-left { transform-origin: right center; }
+.fx-right { animation-name: fx-tocenter-r; }
+@keyframes fx-tocenter { from { transform: translateX(-70px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fx-tocenter-r { from { transform: translateX(70px); opacity: 0; } to { transform: none; opacity: 1; } }
+.fx-q {
+  font-size: 34px; font-weight: 700; color: var(--seal);
+  animation: fx-blink .22s steps(2, jump-none) infinite;
+}
+@keyframes fx-blink { 50% { opacity: .15; } }
+.fx-name { font-size: 30px; font-weight: 700; }
+.fx-center.gold .fx-name { color: #b8860b; text-shadow: 0 0 14px rgba(184, 134, 11, .5); }
+.fx-ch { display: inline-block; opacity: 0; animation: fx-ch .3s ease forwards; }
+@keyframes fx-ch { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+.fx-part {
+  position: absolute; top: 50%; font-size: 15px; color: var(--coin); pointer-events: none;
+  animation: fx-part .8s ease-out forwards;
+}
+.fx-center.gold .fx-part { color: #b8860b; }
+@keyframes fx-part { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-70px); opacity: 0; } }
+.fx-stamp {
+  margin-top: 6px; padding: 4px 10px; border: 2px solid var(--seal); color: var(--seal);
+  font-size: 13px; transform: rotate(-6deg); animation: fx-stamp .25s ease .45s both;
+}
+@keyframes fx-stamp { from { transform: rotate(-6deg) scale(2); opacity: 0; } to { transform: rotate(-6deg) scale(1); opacity: 1; } }
+.fx-fly {
+  position: absolute; font-weight: 700; color: var(--seal);
+  animation: fx-fly .6s ease-in .55s forwards;
+}
+@keyframes fx-fly { to { transform: translate(var(--fly-x, 40vw), var(--fly-y, -30vh)) scale(.6); opacity: 0; } }
+.fx-bubble {
+  position: relative; padding: 10px 16px; border: 1px solid var(--ink); border-radius: 12px;
+  background: #fbf6ea; font-size: 16px; animation: fx-ch .25s ease both;
+}
+.fx-bubble::after {
+  content: ''; position: absolute; left: 24px; bottom: -8px; width: 12px; height: 12px;
+  background: #fbf6ea; border-right: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
+  transform: rotate(45deg);
+}
+.fx-price { font-size: 28px; color: var(--coin); font-variant-numeric: tabular-nums; }
+.fx-label {
+  color: #b8860b; font-weight: 700; font-size: 13px; border: 1px solid #b8860b; padding: 2px 8px;
+  animation: fx-stamp .25s ease .5s both; transform: none;
+}
+.fx-coin { position: absolute; font-size: 20px; color: var(--coin); animation: fx-fly .5s ease-in .8s forwards; }
+.fx-pulse { animation: fx-pulse .35s ease; }
+@keyframes fx-pulse { 35% { transform: scale(1.012); } }
+.fx-shake { animation: fx-shake .32s ease; }
+@keyframes fx-shake {
+  20% { transform: translateX(-4px); } 45% { transform: translateX(3px); }
+  70% { transform: translateX(-2px); } 100% { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #fx { display: none !important; }
+  .signal .fadein { animation: none; opacity: 1; }
+  .fx-pulse, .fx-shake { animation: none; }
+}
 
 /* ── 계약서 ───────────────────────────────────────────── */
 
