@@ -25,7 +25,7 @@ let carry: string[] = [];
 let sent = 0;
 const V: ViewState = {
   selected: [], toast: null, signal: null, log: [], confirm: null,
-  showIntro: true, showCodex: false,
+  showIntro: true, showCodex: false, offlineLog: !remoteEnabled(),
 };
 
 function newRun(): void {
@@ -192,6 +192,15 @@ function onAction(act: string, el: HTMLElement): void {
     case 'codex':
       V.showCodex = !V.showCodex;
       break;
+
+    case 'copylog': {
+      // 로그 서버가 없을 때의 우회로 — 테스터가 요약을 복사해 보내면 지표는 그대로 나온다.
+      const text = JSON.stringify(logger.summary());
+      void navigator.clipboard?.writeText(text)
+        .then(() => { V.toast = '기록을 복사했습니다. 붙여넣어 보내 주세요.'; draw(); })
+        .catch(() => { window.prompt('아래 내용을 복사해 보내 주세요', text); });
+      break;
+    }
 
     case 'again':
       carry = S.carryKeys();

@@ -17,6 +17,8 @@ export interface ViewState {
   confirm: { i: number; j: number; resultName: string } | null;
   showIntro: boolean;
   showCodex: boolean;
+  /** 로그 서버가 꺼져 있을 때만 정산 화면에 "기록 복사" 버튼을 낸다. */
+  offlineLog: boolean;
 }
 
 const esc = (s: string): string =>
@@ -245,7 +247,7 @@ function introOverlay(V: ViewState): string {
   </div>`;
 }
 
-function settleOverlay(S: EconSession): string {
+function settleOverlay(S: EconSession, V: ViewState): string {
   if (S.phase !== 'over' || !S.settlement) return '';
   const s = S.settlement;
   const total = S.reachableCount();
@@ -262,7 +264,11 @@ function settleOverlay(S: EconSession): string {
         ${Array.from({ length: holes }, () => '<span class="hole">?</span>').join('')}
       </div>
       <p class="sub">아직 ${holes}개가 비어 있다.</p>
-      <button class="primary" data-act="again">다시 한 판</button>
+      <div class="row">
+        <button class="primary" data-act="again">다시 한 판</button>
+        ${V.offlineLog ? '<button data-act="copylog">기록 복사</button>' : ''}
+      </div>
+      ${V.offlineLog ? '<p class="sub"><small>테스트에 참여 중이라면 「기록 복사」를 눌러 나온 내용을 보내 주세요.</small></p>' : ''}
     </div>
   </div>`;
 }
@@ -305,6 +311,6 @@ export function render(S: EconSession, V: ViewState): string {
   ${draftOverlay(S)}
   ${buyerOverlay(S)}
   ${confirmOverlay(V)}
-  ${settleOverlay(S)}
+  ${settleOverlay(S, V)}
   ${introOverlay(V)}`;
 }
