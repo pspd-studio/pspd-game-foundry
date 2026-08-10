@@ -67,6 +67,7 @@ function fieldPanel(S: EconSession, V: ViewState): string {
     <p class="hintline">
       이번 턴 남은 실험 <b>${S.unknownLeft}</b>회 ·
       시장 행동 <b>${S.marketActionUsed ? '사용함' : S.marketOpen ? '가능' : '잠김'}</b>
+      ${two && S.wasTried(V.selected[0], V.selected[1]) ? ' · <b>이번 턴에 이미 해본 조합</b>' : ''}
     </p>
     ${V.signal ? `<p class="signal ${V.signal.signal}">${V.signal.signal === 'warm'
       ? '부글거리다 멎었다. 계열은 맞는 것 같다.'

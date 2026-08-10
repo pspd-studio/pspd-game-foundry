@@ -404,6 +404,15 @@ export class EconSession {
   /** 다음 런으로 이월할 레시피 key (계정 도감 — 런 밖 누적). */
   carryKeys(): string[] { return [...this.known]; }
 
+  /** 이번 턴에 이미 실패해 본 쌍들. 재시도는 상한을 깎지 않으므로 UI·도구가 알아야 한다. */
+  get triedKeys(): ReadonlySet<string> { return this.triedThisTurn; }
+
+  /** 이 쌍을 이번 턴에 이미 시도했는가 (i, j는 필드 인덱스). */
+  wasTried(i: number, j: number): boolean {
+    if (i < 0 || j < 0 || i >= this.field.length || j >= this.field.length) return false;
+    return this.triedThisTurn.has(pairKey(this.field[i], this.field[j]));
+  }
+
   /** 이미 아는 쌍이면 결과 카드를 미리 보여준다 (모르는 쌍은 null — 레시피는 숨겨진 채로 둔다). */
   previewResult(i: number, j: number): Card | null {
     if (i < 0 || j < 0 || i >= this.field.length || j >= this.field.length) return null;
