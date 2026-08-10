@@ -12,7 +12,21 @@
  * 개인정보는 보내지 않는다. 세션 식별자는 randomUUID이고 IP·UA는 우리가 따로 기록하지 않는다.
  */
 import { SUPABASE } from '../config.ts';
-import type { LogRecord, Logger } from './log.ts';
+
+/**
+ * 로거는 구조로만 받는다 — v1(log.ts)과 v2.1(playlog.ts)이 같은 전송기를 쓴다.
+ * 전송기가 이벤트 종류를 알 필요는 없다. type + payload(jsonb)로 접어 보내기 때문이다.
+ */
+export interface LogRecord {
+  ms: number;
+  run: number;
+  session: string;
+  event: { t: string; [k: string]: unknown };
+}
+export interface Logger {
+  addSink(s: (r: LogRecord) => void): void;
+  summary(): { session: string; runs: number; session_ms: number; [k: string]: unknown };
+}
 
 const TABLE = 'play_events';
 const BATCH = 12;
