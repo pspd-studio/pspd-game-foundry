@@ -3,17 +3,20 @@
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "카드 조합 발견 로그라이크",
-  "engines": { "node": ">=22.18" },
+  "description": "숨겨진 레시피를 발견해 파는 턴제 조합-경제 로그라이크 (v2.1)",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "validate": "node tools/validate.mjs",
-    "sim": "node tools/simulate.mjs 2000 42",
-    "smoke": "node tools/smoke.mjs",
-    "check": "npm run validate && npm run sim && npm run smoke"
+    "sim": "node tools/simulate2.mjs 2000 42",
+    "smoke": "node tools/smoke2.mjs 200 42",
+    "check": "npm run validate && npm run sim && npm run smoke && npm run typecheck",
+    "sim:v1": "node tools/simulate.mjs 2000 42"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
