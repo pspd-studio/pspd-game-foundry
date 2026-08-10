@@ -43,6 +43,12 @@ export interface EconRules {
    * 1.0이면 현행 유지(= G2 시뮬과 같은 상태)라서 사람 지표와 시뮬 지표를 같은 자로 비교할 수 있다.
    */
   uniqueSuccess: number;
+  /** 시작 패에 보장할 **서로 다른** 확정 조합 수. */
+  startingMinRecipes: number;
+  /** 시작 패에서 같은 카드가 나올 수 있는 최대 장수. */
+  startingMaxDuplicate: number;
+  /** 공급 후보 3장을 서로 다르게 뽑을지. */
+  supplyDistinct: boolean;
 }
 
 const num = (rules: Rules, k: string, fb: number): number =>
@@ -71,6 +77,9 @@ export function readEconRules(rules: Rules): EconRules {
     hintPrice: num(rules, 'v2_hint_price', basePrice.B ?? 12),
     uniqueTier: typeof rules['v2_unique_tier'] === 'string' ? (rules['v2_unique_tier'] as string) : 'C',
     uniqueSuccess: num(rules, 'v2_unique_success_rate', 1.0),
+    startingMinRecipes: num(rules, 'v2_starting_min_recipes', 2),
+    startingMaxDuplicate: num(rules, 'v2_starting_max_duplicate', 2),
+    supplyDistinct: rules['v2_supply_distinct'] === undefined ? true : rules['v2_supply_distinct'] === true,
   };
 }
 
@@ -260,26 +269,57 @@ export function contractLabel(D: GameData, c: ContractDef): string {
 
 /* ── 시작 필드 ───────────────────────────────────────────────── */
 
-/**
- * 시작 필드 7장 — 확정 조합 2쌍 이상 보장 (시드 보정, 최대 40회 재추첨).
- * SSOT 온보딩: 첫 60초에 조합이 반드시 일어나야 한다.
- */
-export function rollStartingField(D: GameData, R: EconRules, region: Region, rng: () => number): string[] {
-  let field: string[] = [];
-  for (let tries = 0; tries < 40; tries++) {
-    field = [];
-    for (let i = 0; i < R.startingHand; i++)
-      field.push(region.card_pool[Math.floor(rng() * region.card_pool.length)]);
-    let pairs = 0;
-    for (const [i, j] of pairsOf(field)) if (D.recipeByKey.has(pairKey(field[i], field[j]))) pairs++;
-    if (pairs >= 2) break;
+/** 이 필드에서 지금 발동 가능한 **서로 다른** 레시피 수. 같은 레시피가 중복 카드로 여러 쌍을 만들어도 1로 센다. */
+export function distinctRecipeCount(D: GameData, field: string[]): number {
+  const seen = new Set<string>();
+  for (const [i, j] of pairsOf(field)) {
+    const k = pairKey(field[i], field[j]);
+    if (D.recipeByKey.has(k)) seen.add(k);
   }
-  return field;
+  return seen.size;
 }
 
-/** 이번 턴 공급 후보 (턴 1~3은 push 3장, 이후는 이 중 1장 드래프트). */
+/** 카드 한 장 뽑기 — 같은 카드가 이미 상한만큼 있으면 다시 뽑는다 (풀이 작아 중복이 잦다). */
+function drawFromPool(region: Region, rng: () => number, have: string[], maxDup: number): string {
+  const pool = region.card_pool;
+  for (let a = 0; a < 12; a++) {
+    const id = pool[Math.floor(rng() * pool.length)];
+    if (have.filter((x) => x === id).length < maxDup) return id;
+  }
+  return pool[Math.floor(rng() * pool.length)]; // 풀이 너무 작아 못 피하면 그냥 준다
+}
+
+/**
+ * 시작 필드 7장.
+ *
+ * **서로 다른 확정 조합 2개 이상**을 보장한다 (시드 보정, 최대 40회 재추첨).
+ * 2026-08-10 정정: 예전에는 "쌍"의 개수를 셌는데, 바람이 3장이면 같은 레시피 하나가 3쌍으로 잡혀
+ * 보장을 통과했다. 첫 조합 한 번 하고 나면 손이 죽는 패가 12.0% 나왔다 (2만 판 실측).
+ * 같은 카드는 기본 2장까지만 (`v2_starting_max_duplicate`) — 7칸 중 3칸이 같은 카드면 선택이 사라진다.
+ */
+export function rollStartingField(D: GameData, R: EconRules, region: Region, rng: () => number): string[] {
+  let best: string[] = [];
+  let bestScore = -1;
+  for (let tries = 0; tries < 40; tries++) {
+    const field: string[] = [];
+    for (let i = 0; i < R.startingHand; i++)
+      field.push(drawFromPool(region, rng, field, R.startingMaxDuplicate));
+    const distinct = distinctRecipeCount(D, field);
+    if (distinct > bestScore) { bestScore = distinct; best = field; }
+    if (distinct >= R.startingMinRecipes) break;
+  }
+  return best; // 40회를 다 써도 그때까지 가장 나은 패를 준다 (빈손보다 낫다)
+}
+
+/**
+ * 이번 턴 공급 후보 (턴 1~3은 push 3장, 이후는 이 중 1장 드래프트).
+ * 후보끼리는 서로 다르게 뽑는다 — 같은 카드 3장을 놓고 "골라라"는 선택지가 아니다 (실측 1.2%).
+ */
 export function rollSupply(R: EconRules, region: Region, rng: () => number): string[] {
-  return Array.from({ length: R.supply }, () => region.card_pool[Math.floor(rng() * region.card_pool.length)]);
+  const out: string[] = [];
+  const maxDup = R.supplyDistinct ? 1 : R.supply;
+  for (let i = 0; i < R.supply; i++) out.push(drawFromPool(region, rng, out, maxDup));
+  return out;
 }
 
 /* ── 정산 ────────────────────────────────────────────────────── */
