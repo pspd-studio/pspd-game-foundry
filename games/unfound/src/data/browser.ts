@@ -9,8 +9,10 @@ import effects from '../../data/effects.json';
 import enemies from '../../data/enemies.json';
 import regions from '../../data/regions.json';
 import rules from '../../data/rules.json';
-import { buildData } from '../core/index.ts';
-import type { GameData, RawData } from '../core/index.ts';
+// core/index.ts가 아니라 data.ts를 직접 부른다 — index.ts는 v1 전투 엔진(부검 후 동결)까지 재수출해서
+// 그쪽을 거치면 슬라이스가 쓰지도 않는 코드가 번들에 실린다.
+import { buildData } from '../core/data.ts';
+import type { GameData, RawData } from '../core/types.ts';
 
 export const DATA: GameData = buildData(
   { cards, recipes, effects, enemies, regions, rules } as unknown as RawData,
